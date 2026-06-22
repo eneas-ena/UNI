@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2B1A12">
+<title>UNI · Agenda, Tarefas e Notas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Couro */
+    --leather-deep:#2B1A12;
+    --leather-mid:#4A2F22;
+    --leather-edge:#1c110b;
+    /* Latão / dourado */
+    --brass:#C19A4B;
+    --brass-bright:#E3C07A;
+    --brass-dim:#8a6e34;
+    /* Papel */
+    --paper:#F4ECD8;
+    --paper-line:#e2d4b4;
+    --paper-edge:#d8c8a4;
+    /* Tinta */
+    --ink:#3A2A1C;
+    --ink-soft:#6f5a44;
+    --ink-faint:#9a866c;
+    /* Acentos */
+    --seal:#8C2B22;      /* vermelho lacre — hoje / urgente */
+    --sage:#5a6b4a;      /* verde — categoria */
+    --indigo:#3c4a63;    /* azul — categoria */
+    --paper-shadow:rgba(58,42,28,.16);
+
+    --r:10px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:"Cormorant Garamond","Iowan Old Style",Georgia,serif;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(120% 90% at 50% -10%, #3a2519 0%, var(--leather-deep) 45%, var(--leather-edge) 100%);
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+    overflow-x:hidden;
+  }
+  /* textura de couro embutida (sem dependências externas) */
+  body::before{
+    content:"";
+    position:fixed; inset:0; pointer-events:none; opacity:.5; z-index:0;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.22'/%3E%3C/svg%3E");
+    mix-blend-mode:overlay;
+  }
+
+  /* ===== Encadernação (a peça central) ===== */
+  .binder{
+    position:relative; z-index:1;
+    width:min(1180px, 96vw);
+    margin:26px auto;
+    flex:1;
+    display:flex;
+    border-radius:16px;
+    background:linear-gradient(135deg,var(--leather-mid),var(--leather-deep));
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.06) inset,
+      0 30px 60px -20px rgba(0,0,0,.7),
+      0 0 0 2px rgba(0,0,0,.35);
+    padding:18px 18px 18px 0;
+    min-height:78vh;
+  }
+  /* costura dourada tracejada na borda do couro */
+  .binder::after{
+    content:""; position:absolute; inset:9px; border-radius:10px;
+    border:1.5px dashed rgba(195,154,75,.45);
+    pointer-events:none;
+  }
+
+  /* ===== Abas / divisórias laterais ===== */
+  .tabs{
+    flex:0 0 64px;
+    display:flex; flex-direction:column;
+    gap:14px;
+    padding:26px 0;
+    align-items:flex-start;
+  }
+  .tab{
+    appearance:none; border:none; cursor:pointer;
+    width:64px; min-height:128px;
+    margin-left:-6px;
+    border-radius:0 9px 9px 0;
+    background:linear-gradient(90deg,#000 0%, var(--tab-color,#6b4a34) 14%, var(--tab-color,#6b4a34) 100%);
+    color:var(--paper);
+    font-family:"Cinzel",serif; font-weight:600; letter-spacing:.18em;
+    writing-mode:vertical-rl; text-orientation:mixed;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:2px 2px 6px rgba(0,0,0,.4);
+    transition:transform .18s ease, filter .18s ease;
+    filter:brightness(.82) saturate(.9);
+    font-size:13px; padding:14px 0;
+  }
+  .tab:hover{ filter:brightness(.95); transform:translateX(3px); }
+  .tab.active{
+    filter:brightness(1.08);
+    transform:translateX(10px);
+    box-shadow:5px 3px 10px rgba(0,0,0,.5);
+  }
+  .tab[data-mod="agenda"]{ --tab-color:#7a5a3a; }
+  .tab[data-mod="tarefas"]{ --tab-color:#6d4742; }
+  .tab[data-mod="notas"]{ --tab-color:#4f5a44; }
+
+  /* ===== Página de papel ===== */
+  .page{
+    flex:1; position:relative;
+    background:
+      linear-gradient(var(--paper),var(--paper));
+    border-radius:4px 10px 10px 4px;
+    box-shadow:
+      -1px 0 0 rgba(0,0,0,.25),
+      0 2px 14px rgba(0,0,0,.35);
+    padding:0;
+    display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  .page::before{ /* textura sutil do papel */
+    content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='0.05'/%3E%3C/svg%3E");
+  }
+
+  /* Cabeçalho da página */
+  .page-head{
+    position:relative; z-index:2;
+    display:flex; align-items:flex-end; justify-content:space-between;
+    gap:16px; flex-wrap:wrap;
+    padding:22px 30px 14px;
+    border-bottom:1px solid var(--paper-line);
+  }
+  .brand{ display:flex; flex-direction:column; line-height:1; }
+  .brand .name{
+    font-family:"Cinzel",serif; font-weight:700;
+    font-size:26px; letter-spacing:.14em; color:var(--ink);
+  }
+  .brand .sub{
+    font-size:15px; color:var(--ink-soft); letter-spacing:.04em; margin-top:5px;
+    font-style:italic;
+  }
+  .today-chip{
+    font-family:"Inter",sans-serif; font-size:12px; font-weight:500;
+    color:var(--ink-soft); text-align:right; letter-spacing:.02em;
+  }
+  .today-chip b{ display:block; font-size:15px; color:var(--seal); text-transform:capitalize; letter-spacing:.03em; }
+
+  /* Corpo rolável do módulo */
+  .page-body{ position:relative; z-index:2; flex:1; overflow:auto; padding:18px 30px 28px; }
+  .page-body::-webkit-scrollbar{ width:10px; }
+  .page-body::-webkit-scrollbar-thumb{ background:var(--paper-edge); border-radius:8px; }
+
+  .mod{ display:none; }
+  .mod.active{ display:block; animation:fade .25s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+
+  /* ===== Botões ===== */
+  .btn{
+    appearance:none; cursor:pointer; font-family:"Inter",sans-serif;
+    font-weight:600; font-size:13px; letter-spacing:.02em;
+    border-radius:8px; padding:9px 15px; border:1px solid var(--brass-dim);
+    background:linear-gradient(180deg,var(--brass-bright),var(--brass));
+    color:#3a2a14; box-shadow:0 1px 2px rgba(0,0,0,.2);
+    transition:filter .15s ease, transform .05s ease;
+  }
+  .btn:hover{ filter:brightness(1.05); }
+  .btn:active{ transform:translateY(1px); }
+  .btn.ghost{
+    background:transparent; color:var(--ink-soft);
+    border:1px solid var(--paper-edge); box-shadow:none;
+  }
+  .btn.ghost:hover{ background:rgba(58,42,28,.05); }
+  .btn.danger{ background:transparent; color:var(--seal); border-color:rgba(140,43,34,.4); box-shadow:none; }
+  .btn.sm{ padding:5px 10px; font-size:12px; }
+
+  .row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .spacer{ flex:1; }
+  .section-title{
+    font-family:"Cinzel",serif; font-size:15px; letter-spacing:.12em;
+    color:var(--ink-soft); text-transform:uppercase; margin:0 0 12px;
+  }
+
+  /* ===== AGENDA / Calendário ===== */
+  .cal-head{ display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+  .cal-title{ font-family:"Cinzel",serif; font-size:20px; letter-spacing:.06em; min-width:200px; text-transform:capitalize; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .cal-dow{ font-family:"Inter",sans-serif; font-size:11px; font-weight:600; letter-spacing:.08em;
+    color:var(--ink-faint); text-align:center; text-transform:uppercase; padding:4px 0; }
+  .cal-cell{
+    position:relative; min-height:78px; border:1px solid var(--paper-line);
+    border-radius:7px; padding:6px 7px; cursor:pointer; background:rgba(255,255,255,.25);
+    transition:background .12s ease, border-color .12s ease;
+  }
+  .cal-cell:hover{ background:rgba(255,255,255,.55); border-color:var(--brass); }
+  .cal-cell.out{ opacity:.35; }
+  .cal-cell.sel{ border-color:var(--brass); box-shadow:0 0 0 2px rgba(195,154,75,.4) inset; }
+  .cal-cell .dn{ font-family:"Inter",sans-serif; font-size:13px; font-weight:600; color:var(--ink-soft); }
+  .cal-cell.today .dn{
+    color:#fff; background:var(--seal); width:24px; height:24px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:12px;
+  }
+  .dots{ position:absolute; bottom:6px; left:7px; display:flex; gap:3px; }
+  .dot{ width:6px; height:6px; border-radius:50%; }
+
+  .day-panel{ margin-top:20px; border-top:1px solid var(--paper-line); padding-top:16px; }
+  .ev{
+    display:flex; gap:12px; align-items:flex-start; padding:11px 12px;
+    border:1px solid var(--paper-line); border-radius:8px; margin-bottom:9px; background:rgba(255,255,255,.3);
+  }
+  .ev .bar{ width:4px; align-self:stretch; border-radius:3px; }
+  .ev .time{ font-family:"Inter",sans-serif; font-size:12px; font-weight:600; color:var(--ink-soft); min-width:48px; }
+  .ev .ti{ font-size:18px; font-weight:600; }
+  .ev .nt{ font-size:15px; color:var(--ink-soft); font-style:italic; }
+
+  /* ===== TAREFAS ===== */
+  .task{
+    display:flex; align-items:center; gap:12px; padding:11px 12px;
+    border:1px solid var(--paper-line); border-radius:8px; margin-bottom:9px; background:rgba(255,255,255,.3);
+  }
+  .check{
+    width:22px; height:22px; flex:0 0 22px; border-radius:6px; cursor:pointer;
+    border:2px solid var(--brass-dim); display:flex; align-items:center; justify-content:center;
+    background:transparent; color:transparent; font-weight:700; transition:.12s;
+  }
+  .task.done .check{ background:var(--sage); border-color:var(--sage); color:#fff; }
+  .task.done .t-title{ text-decoration:line-through; color:var(--ink-faint); }
+  .t-title{ flex:1; font-size:18px; cursor:pointer; border-radius:5px; padding:2px 4px; margin:-2px -4px; transition:background .12s; }
+  .t-title:hover{ background:rgba(195,154,75,.16); }
+  .pri{ font-family:"Inter",sans-serif; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+    padding:3px 8px; border-radius:20px; }
+  .pri.alta{ background:rgba(140,43,34,.15); color:var(--seal); }
+  .pri.media{ background:rgba(195,154,75,.22); color:#8a6e34; }
+  .pri.baixa{ background:rgba(90,107,74,.18); color:var(--sage); }
+  .filters{ display:flex; gap:6px; margin-bottom:14px; }
+  .filters .btn.active{ outline:2px solid var(--brass-dim); }
+
+  /* ===== NOTAS ===== */
+  .notes-wrap{ display:grid; grid-template-columns:260px 1fr; gap:18px; height:100%; }
+  .notes-list{ border-right:1px solid var(--paper-line); padding-right:14px; overflow:auto; }
+  .note-item{
+    padding:11px 12px; border:1px solid var(--paper-line); border-radius:8px; margin-bottom:9px;
+    cursor:pointer; background:rgba(255,255,255,.3); transition:.12s;
+  }
+  .note-item:hover{ border-color:var(--brass); }
+  .note-item.active{ border-color:var(--brass); box-shadow:0 0 0 2px rgba(195,154,75,.35) inset; }
+  .note-item .ni-title{ font-size:17px; font-weight:600; }
+  .note-item .ni-prev{ font-size:14px; color:var(--ink-faint); font-style:italic;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .note-editor{ display:flex; flex-direction:column; }
+  .note-editor input.ne-title{
+    font-family:"Cinzel",serif; font-size:22px; letter-spacing:.04em; color:var(--ink);
+    border:none; background:transparent; outline:none; margin-bottom:8px; width:100%;
+    border-bottom:1px solid var(--paper-line); padding-bottom:8px;
+  }
+  .note-editor textarea{
+    flex:1; min-height:340px; border:none; background:transparent; outline:none; resize:none;
+    font-family:"Cormorant Garamond",serif; font-size:19px; line-height:1.7; color:var(--ink);
+    background-image:repeating-linear-gradient(transparent, transparent 31px, var(--paper-line) 32px);
+    line-height:32px; padding-top:2px;
+  }
+
+  .input, .select{
+    font-family:"Cormorant Garamond",serif; font-size:17px; color:var(--ink);
+    border:1px solid var(--paper-edge); border-radius:8px; padding:9px 11px; background:rgba(255,255,255,.5);
+    outline:none; width:100%;
+  }
+  .input:focus, .select:focus{ border-color:var(--brass); }
+  label.fld{ display:block; font-family:"Inter",sans-serif; font-size:11px; font-weight:600;
+    letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint); margin:0 0 5px; }
+
+  .empty{ text-align:center; color:var(--ink-faint); font-style:italic; font-size:18px; padding:40px 16px; }
+
+  /* ===== Modal ===== */
+  .overlay{ position:fixed; inset:0; z-index:50; background:rgba(20,12,7,.55);
+    display:none; align-items:center; justify-content:center; padding:18px; backdrop-filter:blur(2px); }
+  .overlay.open{ display:flex; }
+  .modal{
+    width:min(440px,94vw); background:var(--paper); border-radius:14px;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.7), 0 0 0 2px var(--brass-dim);
+    padding:22px 24px; position:relative;
+  }
+  .modal h3{ font-family:"Cinzel",serif; font-size:18px; letter-spacing:.08em; margin:0 0 16px; color:var(--ink); }
+  .modal .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .modal .fldgroup{ margin-bottom:14px; }
+  .modal .actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+
+  /* ===== Responsivo: iPad e iPhone ===== */
+  @media (max-width:820px){
+    .binder{ flex-direction:column; padding:14px; min-height:auto; margin:12px auto; }
+    .binder::after{ inset:7px; }
+    .tabs{
+      flex-direction:row; flex:none; gap:8px; padding:4px 4px 12px; width:100%;
+      justify-content:center;
+    }
+    .tab{
+      writing-mode:horizontal-tb; min-height:0; width:auto; margin-left:0;
+      border-radius:9px; padding:10px 16px; font-size:12px; letter-spacing:.12em;
+    }
+    .tab.active{ transform:translateY(-2px); }
+    .page{ border-radius:8px; }
+    .page-head{ padding:16px 16px 12px; }
+    .page-body{ padding:14px 16px 22px; }
+    .cal-cell{ min-height:54px; }
+    .notes-wrap{ grid-template-columns:1fr; }
+    .notes-list{ border-right:none; border-bottom:1px solid var(--paper-line); padding-right:0; padding-bottom:12px; max-height:200px; }
+  }
+  @media (max-width:480px){
+    .brand .name{ font-size:21px; }
+    .cal-cell{ min-height:46px; padding:4px; }
+    .cal-cell .dn{ font-size:12px; }
+    .cal-title{ font-size:17px; min-width:0; }
+    .modal .grid2{ grid-template-columns:1fr; }
+  }
+  @media (prefers-reduced-motion:reduce){ *{ animation:none!important; transition:none!important; } }
+</style>
+</head>
+<body>
+  <main class="binder">
+    <nav class="tabs" aria-label="Seções">
+      <button class="tab active" data-mod="agenda">Agenda</button>
+      <button class="tab" data-mod="tarefas">Tarefas</button>
+      <button class="tab" data-mod="notas">Notas</button>
+    </nav>
+
+    <section class="page">
+      <header class="page-head">
+        <div class="brand">
+          <span class="name">UNI</span>
+          <span class="sub">agenda · tarefas · notas, em um só lugar</span>
+        </div>
+        <div class="today-chip" id="todayChip"></div>
+      </header>
+
+      <div class="page-body">
+
+        <!-- AGENDA -->
+        <div class="mod active" id="mod-agenda">
+          <div class="cal-head">
+            <button class="btn ghost sm" id="calPrev">‹</button>
+            <div class="cal-title" id="calTitle"></div>
+            <button class="btn ghost sm" id="calNext">›</button>
+            <button class="btn ghost sm" id="calToday">Hoje</button>
+            <div class="spacer"></div>
+            <button class="btn" id="addEvent">+ Novo compromisso</button>
+          </div>
+          <div class="cal-grid" id="calDow"></div>
+          <div class="cal-grid" id="calGrid" style="margin-top:6px;"></div>
+
+          <div class="day-panel">
+            <div class="section-title" id="dayTitle">Compromissos</div>
+            <div id="dayList"></div>
+          </div>
+        </div>
+
+        <!-- TAREFAS -->
+        <div class="mod" id="mod-tarefas">
+          <div class="row" style="margin-bottom:14px;">
+            <div class="section-title" style="margin:0;">Tarefas</div>
+            <div class="spacer"></div>
+            <button class="btn" id="addTask">+ Nova tarefa</button>
+          </div>
+          <div class="filters" id="taskFilters">
+            <button class="btn ghost sm active" data-f="pendentes">Pendentes</button>
+            <button class="btn ghost sm" data-f="todas">Todas</button>
+            <button class="btn ghost sm" data-f="concluidas">Concluídas</button>
+          </div>
+          <div id="taskList"></div>
+        </div>
+
+        <!-- NOTAS -->
+        <div class="mod" id="mod-notas">
+          <div class="row" style="margin-bottom:14px;">
+            <div class="section-title" style="margin:0;">Anotações</div>
+            <div class="spacer"></div>
+            <input class="input" id="noteSearch" placeholder="Buscar…" style="max-width:200px;">
+            <button class="btn" id="addNote">+ Nova nota</button>
+          </div>
+          <div class="notes-wrap">
+            <div class="notes-list" id="noteList"></div>
+            <div class="note-editor" id="noteEditor">
+              <div class="empty">Selecione uma nota ou crie a primeira.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal de evento -->
+  <div class="overlay" id="evOverlay">
+    <div class="modal">
+      <h3 id="evModalTitle">Novo compromisso</h3>
+      <div class="fldgroup">
+        <label class="fld">Título</label>
+        <input class="input" id="evTitle" placeholder="Ex.: Culto da noite">
+      </div>
+      <div class="grid2">
+        <div class="fldgroup">
+          <label class="fld">Data</label>
+          <input class="input" id="evDate" type="date">
+        </div>
+        <div class="fldgroup">
+          <label class="fld">Horário</label>
+          <input class="input" id="evTime" type="time">
+        </div>
+      </div>
+      <div class="fldgroup">
+        <label class="fld">Categoria</label>
+        <select class="select" id="evColor">
+          <option value="seal">Ministério / Culto</option>
+          <option value="indigo">Reunião / Aconselhamento</option>
+          <option value="sage">Pessoal</option>
+          <option value="brass">Estudo / Escrita</option>
+        </select>
+      </div>
+      <div class="fldgroup">
+        <label class="fld">Observação</label>
+        <input class="input" id="evNote" placeholder="Opcional">
+      </div>
+      <div class="actions">
+        <button class="btn danger" id="evDelete" style="margin-right:auto; display:none;">Excluir</button>
+        <button class="btn ghost" id="evCancel">Cancelar</button>
+        <button class="btn" id="evSave">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de tarefa -->
+  <div class="overlay" id="tkOverlay">
+    <div class="modal">
+      <h3 id="tkModalTitle">Nova tarefa</h3>
+      <div class="fldgroup">
+        <label class="fld">O que precisa ser feito</label>
+        <input class="input" id="tkTitle" placeholder="Ex.: Preparar estudo de quarta">
+      </div>
+      <div class="fldgroup">
+        <label class="fld">Prioridade</label>
+        <select class="select" id="tkPri">
+          <option value="media">Média</option>
+          <option value="alta">Alta</option>
+          <option value="baixa">Baixa</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button class="btn danger" id="tkDelete" style="margin-right:auto; display:none;">Excluir</button>
+        <button class="btn ghost" id="tkCancel">Cancelar</button>
+        <button class="btn" id="tkSave">Adicionar</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- Persistência (localStorage com fallback em memória) ---------- */
+  var Store = (function(){
+    var mem = {}, ok = true;
+    try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); }
+    catch(e){ ok = false; }
+    return {
+      read:function(k,def){
+        try{ var v = ok ? localStorage.getItem(k) : mem[k];
+          return v ? JSON.parse(v) : def; }catch(e){ return def; }
+      },
+      write:function(k,val){
+        var s = JSON.stringify(val);
+        try{ if(ok) localStorage.setItem(k,s); else mem[k]=s; }catch(e){ mem[k]=s; }
+      }
+    };
+  })();
+
+  var NS = "vidas_org_v1_";
+  var db = {
+    events: Store.read(NS+"events", []),
+    tasks:  Store.read(NS+"tasks", []),
+    notes:  Store.read(NS+"notes", [])
+  };
+  function save(key){ Store.write(NS+key, db[key]); }
+  function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+  /* ---------- Utilitários de data ---------- */
+  var MESES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  var DOW = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+  var COLORS = { seal:"var(--seal)", indigo:"var(--indigo)", sage:"var(--sage)", brass:"var(--brass)" };
+
+  function pad(n){ return (n<10?"0":"")+n; }
+  function ymd(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function todayYmd(){ return ymd(new Date()); }
+  function fmtLong(ymdStr){
+    var p = ymdStr.split("-"); var d = new Date(+p[0],+p[1]-1,+p[2]);
+    return DOW[d.getDay()]+", "+(+p[2])+" de "+MESES[+p[1]-1];
+  }
+
+  /* ---------- Navegação entre módulos (abas) ---------- */
+  var tabs = document.querySelectorAll(".tab");
+  tabs.forEach(function(t){
+    t.addEventListener("click", function(){
+      tabs.forEach(function(x){ x.classList.remove("active"); });
+      t.classList.add("active");
+      document.querySelectorAll(".mod").forEach(function(m){ m.classList.remove("active"); });
+      document.getElementById("mod-"+t.dataset.mod).classList.add("active");
+    });
+  });
+
+  /* Cabeçalho com a data de hoje */
+  (function(){
+    var d = new Date();
+    document.getElementById("todayChip").innerHTML =
+      "hoje<b>"+DOW[d.getDay()]+", "+d.getDate()+" "+MESES[d.getMonth()]+"</b>";
+  })();
+
+  /* ================= AGENDA ================= */
+  var calCursor = new Date();
+  var selDay = todayYmd();
+
+  (function fillDow(){
+    var html = "";
+    DOW.forEach(function(d){ html += '<div class="cal-dow">'+d+'</div>'; });
+    document.getElementById("calDow").innerHTML = html;
+  })();
+
+  function eventsOn(dateStr){
+    return db.events.filter(function(e){ return e.date===dateStr; })
+      .sort(function(a,b){ return (a.time||"").localeCompare(b.time||""); });
+  }
+
+  function renderCalendar(){
+    var y = calCursor.getFullYear(), m = calCursor.getMonth();
+    document.getElementById("calTitle").textContent = MESES[m]+" "+y;
+    var first = new Date(y,m,1);
+    var start = first.getDay();              // 0=Dom
+    var daysInMonth = new Date(y,m+1,0).getDate();
+    var prevDays = new Date(y,m,0).getDate();
+    var cells = [];
+    // dias do mês anterior (preenchimento)
+    for(var i=start-1;i>=0;i--) cells.push({d:prevDays-i, out:true, date:ymd(new Date(y,m-1,prevDays-i))});
+    // dias do mês
+    for(var d=1; d<=daysInMonth; d++) cells.push({d:d, out:false, date:ymd(new Date(y,m,d))});
+    // completar a última semana
+    while(cells.length % 7 !== 0) {
+      var nd = cells.length - (start+daysInMonth) + 1;
+      cells.push({d:nd, out:true, date:ymd(new Date(y,m+1,nd))});
+    }
+    var today = todayYmd();
+    var html = "";
+    cells.forEach(function(c){
+      var evs = eventsOn(c.date);
+      var dots = "";
+      evs.slice(0,4).forEach(function(e){
+        dots += '<span class="dot" style="background:'+(COLORS[e.color]||COLORS.brass)+'"></span>';
+      });
+      html += '<div class="cal-cell'
+        + (c.out?' out':'')
+        + (c.date===today?' today':'')
+        + (c.date===selDay?' sel':'')
+        + '" data-date="'+c.date+'">'
+        + '<span class="dn">'+c.d+'</span>'
+        + '<div class="dots">'+dots+'</div></div>';
+    });
+    var grid = document.getElementById("calGrid");
+    grid.innerHTML = html;
+    grid.querySelectorAll(".cal-cell").forEach(function(cell){
+      cell.addEventListener("click", function(){
+        selDay = cell.dataset.date;
+        renderCalendar(); renderDay();
+      });
+    });
+  }
+
+  function renderDay(){
+    document.getElementById("dayTitle").textContent = "Compromissos — "+fmtLong(selDay);
+    var evs = eventsOn(selDay);
+    var box = document.getElementById("dayList");
+    if(!evs.length){ box.innerHTML = '<div class="empty">Nenhum compromisso neste dia. Toque em “Novo compromisso” para começar.</div>'; return; }
+    box.innerHTML = evs.map(function(e){
+      return '<div class="ev" data-id="'+e.id+'">'
+        + '<span class="bar" style="background:'+(COLORS[e.color]||COLORS.brass)+'"></span>'
+        + '<span class="time">'+(e.time||"—")+'</span>'
+        + '<div style="flex:1"><div class="ti">'+escapeHtml(e.title)+'</div>'
+        + (e.note?'<div class="nt">'+escapeHtml(e.note)+'</div>':'')+'</div></div>';
+    }).join("");
+    box.querySelectorAll(".ev").forEach(function(el){
+      el.addEventListener("click", function(){ openEvent(el.dataset.id); });
+    });
+  }
+
+  /* Modal de evento */
+  var evOverlay = document.getElementById("evOverlay");
+  var editingEventId = null;
+
+  function openEvent(id){
+    editingEventId = id || null;
+    var del = document.getElementById("evDelete");
+    if(id){
+      var e = db.events.find(function(x){ return x.id===id; });
+      document.getElementById("evModalTitle").textContent = "Editar compromisso";
+      document.getElementById("evTitle").value = e.title||"";
+      document.getElementById("evDate").value = e.date||selDay;
+      document.getElementById("evTime").value = e.time||"";
+      document.getElementById("evColor").value = e.color||"seal";
+      document.getElementById("evNote").value = e.note||"";
+      del.style.display = "inline-block";
+    } else {
+      document.getElementById("evModalTitle").textContent = "Novo compromisso";
+      document.getElementById("evTitle").value = "";
+      document.getElementById("evDate").value = selDay;
+      document.getElementById("evTime").value = "";
+      document.getElementById("evColor").value = "seal";
+      document.getElementById("evNote").value = "";
+      del.style.display = "none";
+    }
+    evOverlay.classList.add("open");
+    document.getElementById("evTitle").focus();
+  }
+  function closeEvent(){ evOverlay.classList.remove("open"); }
+
+  document.getElementById("addEvent").addEventListener("click", function(){ openEvent(null); });
+  document.getElementById("evCancel").addEventListener("click", closeEvent);
+  evOverlay.addEventListener("click", function(e){ if(e.target===evOverlay) closeEvent(); });
+  document.getElementById("evSave").addEventListener("click", function(){
+    var title = document.getElementById("evTitle").value.trim();
+    if(!title){ document.getElementById("evTitle").focus(); return; }
+    var data = {
+      title:title,
+      date:document.getElementById("evDate").value || selDay,
+      time:document.getElementById("evTime").value,
+      color:document.getElementById("evColor").value,
+      note:document.getElementById("evNote").value.trim()
+    };
+    if(editingEventId){
+      var e = db.events.find(function(x){ return x.id===editingEventId; });
+      Object.assign(e, data);
+    } else {
+      data.id = uid(); db.events.push(data);
+    }
+    save("events"); selDay = data.date; calCursor = new Date(data.date+"T00:00:00");
+    closeEvent(); renderCalendar(); renderDay();
+  });
+  document.getElementById("evDelete").addEventListener("click", function(){
+    db.events = db.events.filter(function(x){ return x.id!==editingEventId; });
+    save("events"); closeEvent(); renderCalendar(); renderDay();
+  });
+
+  document.getElementById("calPrev").addEventListener("click", function(){ calCursor.setMonth(calCursor.getMonth()-1); renderCalendar(); });
+  document.getElementById("calNext").addEventListener("click", function(){ calCursor.setMonth(calCursor.getMonth()+1); renderCalendar(); });
+  document.getElementById("calToday").addEventListener("click", function(){ calCursor=new Date(); selDay=todayYmd(); renderCalendar(); renderDay(); });
+
+  /* ================= TAREFAS ================= */
+  var taskFilter = "pendentes";
+  var tkOverlay = document.getElementById("tkOverlay");
+  var editingTaskId = null;
+
+  function renderTasks(){
+    var list = db.tasks.slice().sort(function(a,b){
+      var order = {alta:0, media:1, baixa:2};
+      if(a.done!==b.done) return a.done?1:-1;
+      return order[a.pri]-order[b.pri];
+    });
+    if(taskFilter==="pendentes") list = list.filter(function(t){ return !t.done; });
+    if(taskFilter==="concluidas") list = list.filter(function(t){ return t.done; });
+    var box = document.getElementById("taskList");
+    if(!list.length){ box.innerHTML = '<div class="empty">Sua lista está limpa. Adicione a primeira tarefa.</div>'; return; }
+    box.innerHTML = list.map(function(t){
+      return '<div class="task'+(t.done?' done':'')+'" data-id="'+t.id+'">'
+        + '<div class="check" title="Concluir">✓</div>'
+        + '<span class="t-title" title="Tocar para editar">'+escapeHtml(t.title)+'</span>'
+        + '<span class="pri '+t.pri+'">'+t.pri+'</span>'
+        + '<button class="btn danger sm t-del" title="Excluir">✕</button></div>';
+    }).join("");
+    box.querySelectorAll(".task").forEach(function(el){
+      var id = el.dataset.id;
+      el.querySelector(".check").addEventListener("click", function(){
+        var t = db.tasks.find(function(x){ return x.id===id; });
+        t.done = !t.done; save("tasks"); renderTasks();
+      });
+      el.querySelector(".t-title").addEventListener("click", function(){ openTask(id); });
+      el.querySelector(".t-del").addEventListener("click", function(){
+        db.tasks = db.tasks.filter(function(x){ return x.id!==id; });
+        save("tasks"); renderTasks();
+      });
+    });
+  }
+
+  function openTask(id){
+    editingTaskId = id || null;
+    var del = document.getElementById("tkDelete");
+    if(id){
+      var t = db.tasks.find(function(x){ return x.id===id; });
+      document.getElementById("tkModalTitle").textContent = "Editar tarefa";
+      document.getElementById("tkTitle").value = t.title||"";
+      document.getElementById("tkPri").value = t.pri||"media";
+      document.getElementById("tkSave").textContent = "Salvar";
+      del.style.display = "inline-block";
+    } else {
+      document.getElementById("tkModalTitle").textContent = "Nova tarefa";
+      document.getElementById("tkTitle").value = "";
+      document.getElementById("tkPri").value = "media";
+      document.getElementById("tkSave").textContent = "Adicionar";
+      del.style.display = "none";
+    }
+    tkOverlay.classList.add("open");
+    document.getElementById("tkTitle").focus();
+  }
+  function closeTask(){ tkOverlay.classList.remove("open"); }
+
+  document.getElementById("taskFilters").querySelectorAll("button").forEach(function(b){
+    b.addEventListener("click", function(){
+      document.getElementById("taskFilters").querySelectorAll("button").forEach(function(x){ x.classList.remove("active"); });
+      b.classList.add("active"); taskFilter = b.dataset.f; renderTasks();
+    });
+  });
+  document.getElementById("addTask").addEventListener("click", function(){ openTask(null); });
+  document.getElementById("tkCancel").addEventListener("click", closeTask);
+  tkOverlay.addEventListener("click", function(e){ if(e.target===tkOverlay) closeTask(); });
+  document.getElementById("tkSave").addEventListener("click", function(){
+    var title = document.getElementById("tkTitle").value.trim();
+    if(!title){ document.getElementById("tkTitle").focus(); return; }
+    var pri = document.getElementById("tkPri").value;
+    if(editingTaskId){
+      var t = db.tasks.find(function(x){ return x.id===editingTaskId; });
+      t.title = title; t.pri = pri;
+    } else {
+      db.tasks.push({ id:uid(), title:title, pri:pri, done:false });
+    }
+    save("tasks"); closeTask(); renderTasks();
+  });
+  document.getElementById("tkDelete").addEventListener("click", function(){
+    db.tasks = db.tasks.filter(function(x){ return x.id!==editingTaskId; });
+    save("tasks"); closeTask(); renderTasks();
+  });
+  document.getElementById("tkTitle").addEventListener("keydown", function(e){ if(e.key==="Enter") document.getElementById("tkSave").click(); });
+
+  /* ================= NOTAS ================= */
+  var activeNote = null;
+  var noteSearch = "";
+
+  function renderNoteList(){
+    var list = db.notes.slice().sort(function(a,b){ return (b.updated||0)-(a.updated||0); });
+    if(noteSearch){
+      var q = noteSearch.toLowerCase();
+      list = list.filter(function(n){ return (n.title+" "+n.body).toLowerCase().indexOf(q)>=0; });
+    }
+    var box = document.getElementById("noteList");
+    if(!list.length){ box.innerHTML = '<div class="empty" style="font-size:15px;padding:20px 8px;">Nenhuma anotação ainda.</div>'; return; }
+    box.innerHTML = list.map(function(n){
+      var prev = (n.body||"").replace(/\s+/g," ").trim().slice(0,42) || "—";
+      return '<div class="note-item'+(activeNote===n.id?' active':'')+'" data-id="'+n.id+'">'
+        + '<div class="ni-title">'+escapeHtml(n.title||"Sem título")+'</div>'
+        + '<div class="ni-prev">'+escapeHtml(prev)+'</div></div>';
+    }).join("");
+    box.querySelectorAll(".note-item").forEach(function(el){
+      el.addEventListener("click", function(){ openNote(el.dataset.id); });
+    });
+  }
+
+  function openNote(id){
+    activeNote = id;
+    var n = db.notes.find(function(x){ return x.id===id; });
+    var ed = document.getElementById("noteEditor");
+    ed.innerHTML =
+      '<input class="ne-title" id="neTitle" placeholder="Título da nota" value="'+escapeAttr(n.title||"")+'">'
+      + '<textarea id="neBody" placeholder="Escreva aqui…"></textarea>'
+      + '<div class="row" style="margin-top:10px;"><div class="spacer"></div>'
+      + '<button class="btn danger sm" id="neDel">Excluir nota</button></div>';
+    document.getElementById("neBody").value = n.body||"";
+    function persist(){
+      n.title = document.getElementById("neTitle").value;
+      n.body  = document.getElementById("neBody").value;
+      n.updated = Date.now();
+      save("notes"); renderNoteList();
+    }
+    document.getElementById("neTitle").addEventListener("input", persist);
+    document.getElementById("neBody").addEventListener("input", persist);
+    document.getElementById("neDel").addEventListener("click", function(){
+      db.notes = db.notes.filter(function(x){ return x.id!==id; });
+      activeNote = null; save("notes"); renderNoteList();
+      document.getElementById("noteEditor").innerHTML = '<div class="empty">Selecione uma nota ou crie a primeira.</div>';
+    });
+    renderNoteList();
+  }
+
+  document.getElementById("addNote").addEventListener("click", function(){
+    var n = { id:uid(), title:"", body:"", updated:Date.now() };
+    db.notes.push(n); save("notes"); openNote(n.id);
+    setTimeout(function(){ var t=document.getElementById("neTitle"); if(t) t.focus(); },30);
+  });
+  document.getElementById("noteSearch").addEventListener("input", function(e){ noteSearch=e.target.value; renderNoteList(); });
+
+  /* ---------- helpers ---------- */
+  function escapeHtml(s){ return (s||"").replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function escapeAttr(s){ return escapeHtml(s).replace(/"/g,"&quot;"); }
+
+  /* Tecla ESC fecha modais */
+  document.addEventListener("keydown", function(e){
+    if(e.key==="Escape"){ closeEvent(); tkOverlay.classList.remove("open"); }
+  });
+
+  /* ---------- Boot ---------- */
+  renderCalendar();
+  renderDay();
+  renderTasks();
+  renderNoteList();
+})();
+</script>
+</body>
+</html>
