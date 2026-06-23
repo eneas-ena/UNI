@@ -1275,6 +1275,22 @@
     h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     return h;
   }
+  // converte a marcação (** e #) em texto limpo e legível para o Caderno
+  function aiStripMd(s){
+    return (s||"").split("\n").map(function(line){
+      var h = line.match(/^\s*#{1,6}\s+(.*)$/);
+      if(h){ return h[1].replace(/\*\*/g,"").trim().toUpperCase(); }
+      var b = line.match(/^\s*\*\*(.+?)\*\*\s*:?\s*(.*)$/);
+      if(b){
+        var titulo = b[1].trim().replace(/:$/,"").toUpperCase();
+        var resto = b[2].trim().replace(/\*\*/g,"");
+        return resto ? (titulo + ": " + resto) : titulo;
+      }
+      var t = line.replace(/^(\s*)[-*]\s+/, "$1• ");
+      t = t.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*\*/g,"");
+      return t;
+    }).join("\n");
+  }
   function callAI(system, userText){
     return fetch(WORKER_URL, {
       method:"POST",
@@ -1328,14 +1344,15 @@
 
   document.getElementById("aiCopy").addEventListener("click", function(){
     if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(aiLast).then(function(){
+      navigator.clipboard.writeText(aiStripMd(aiLast)).then(function(){
         var b=document.getElementById("aiCopy"); var t=b.textContent; b.textContent="Copiado!"; setTimeout(function(){ b.textContent=t; },1500);
       }).catch(function(){});
     }
   });
   document.getElementById("aiSave").addEventListener("click", function(){
-    var firstLine=(aiLast.split("\n").find(function(l){ return l.trim(); })||"Estudo").replace(/\*\*/g,"").trim().slice(0,60);
-    var w={ id:uid(), title:firstLine, body:aiLast, updated:Date.now() };
+    var clean=aiStripMd(aiLast);
+    var firstLine=(clean.split("\n").find(function(l){ return l.trim(); })||"Estudo").trim().slice(0,60);
+    var w={ id:uid(), title:firstLine, body:clean, updated:Date.now() };
     db.writings.push(w); activeWriting=w.id; saveLocal("writings");
     mirror("upsert","writings",{id:w.id,title:w.title,body:w.body,updated:w.updated});
     // leva para o Caderno já com o texto aberto
