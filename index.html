@@ -360,6 +360,41 @@
   .auth-toggle{ margin-top:16px; font-size:15px; color:#e9dac0; display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; }
   .cover .btn.ghost{ color:#f3e7cc; border-color:rgba(228,212,180,.4); }
   @media (max-width:480px){ .cover-badge{ width:86px; height:86px; } .cover-strap{ right:-18px; width:40px; height:96px; } .cover{ padding:24px 20px 22px; } }
+  /* ===== Cores das novas abas ===== */
+  .tab[data-mod="quadro"]{ --tab-color:#3f4d5e; }
+  .tab[data-mod="caderno"]{ --tab-color:#5e4a63; }
+
+  /* ===== QUADRO (Kanban) ===== */
+  .kanban{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-items:start; }
+  .kcol{ background:rgba(255,255,255,.22); border:1px solid var(--paper-line); border-radius:10px; padding:10px; min-height:120px; }
+  .kcol.dragover{ border-color:var(--brass); background:rgba(195,154,75,.12); }
+  .kcol-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .kcol-title{ font-family:"Cinzel",serif; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); }
+  .kcol[data-col="0"] .kcol-title{ color:var(--seal); }
+  .kcol[data-col="1"] .kcol-title{ color:#8a6e34; }
+  .kcol[data-col="2"] .kcol-title{ color:var(--sage); }
+  .kcard{ background:var(--paper); border:1px solid var(--paper-edge); border-radius:8px; padding:9px 11px;
+    margin-bottom:9px; box-shadow:0 1px 3px var(--paper-shadow); cursor:grab; }
+  .kcard:active{ cursor:grabbing; }
+  .kcard.dragging{ opacity:.45; }
+  .kcard .kc-title{ font-size:16px; }
+  .kcard .kc-note{ font-size:14px; color:var(--ink-soft); font-style:italic; margin-top:2px; }
+  .kcard .kc-foot{ display:flex; gap:6px; margin-top:8px; align-items:center; }
+  .kmini{ appearance:none; border:1px solid var(--paper-edge); background:transparent; border-radius:6px;
+    cursor:pointer; font-size:14px; color:var(--ink-soft); min-width:26px; height:26px; line-height:1; padding:0; }
+  .kmini:hover:not(:disabled){ border-color:var(--brass); color:var(--ink); }
+  .kmini:disabled{ opacity:.3; cursor:default; }
+
+  /* ===== CADERNO (escrita livre) ===== */
+  .writing-title{ font-family:"Cinzel",serif; font-size:24px; letter-spacing:.04em; color:var(--ink);
+    border:none; background:transparent; outline:none; width:100%; border-bottom:1px solid var(--paper-line);
+    padding-bottom:10px; margin-bottom:12px; }
+  .writing-body{ width:100%; border:none; background:transparent; outline:none; resize:none;
+    font-family:"Cormorant Garamond",serif; font-size:20px; color:var(--ink); min-height:48vh;
+    background-image:repeating-linear-gradient(transparent, transparent 33px, var(--paper-line) 34px);
+    line-height:34px; padding-top:3px; }
+  .writing-count{ font-family:"Inter",sans-serif; font-size:12px; color:var(--ink-faint); text-align:right;
+    margin-top:8px; letter-spacing:.02em; }
 </style>
 </head>
 <body>
@@ -368,6 +403,8 @@
       <button class="tab active" data-mod="agenda">Agenda</button>
       <button class="tab" data-mod="tarefas">Tarefas</button>
       <button class="tab" data-mod="notas">Notas</button>
+      <button class="tab" data-mod="quadro">Quadro</button>
+      <button class="tab" data-mod="caderno">Caderno</button>
     </nav>
 
     <section class="page">
@@ -440,6 +477,25 @@
           </div>
         </div>
 
+        <!-- QUADRO (Kanban) -->
+        <div class="mod" id="mod-quadro">
+          <div class="row" style="margin-bottom:14px;">
+            <div class="section-title" style="margin:0;">Quadro de planejamento</div>
+          </div>
+          <div class="kanban" id="kanban"></div>
+        </div>
+
+        <!-- CADERNO (escrita livre) -->
+        <div class="mod" id="mod-caderno">
+          <div class="row" style="margin-bottom:12px;">
+            <div class="section-title" style="margin:0;">Caderno</div>
+            <div class="spacer"></div>
+            <select class="select" id="wSelect" style="max-width:240px;"></select>
+            <button class="btn" id="wNew">+ Novo texto</button>
+          </div>
+          <div id="wEditor"></div>
+        </div>
+
       </div>
     </section>
   </main>
@@ -507,6 +563,30 @@
     </div>
   </div>
 
+  <!-- Modal de cartão (Quadro) -->
+  <div class="overlay" id="kbOverlay">
+    <div class="modal">
+      <h3 id="kbModalTitle">Novo cartão</h3>
+      <div class="fldgroup">
+        <label class="fld">Título</label>
+        <input class="input" id="kbTitle" placeholder="Ex.: Preparar série sobre Salmos">
+      </div>
+      <div class="fldgroup">
+        <label class="fld">Detalhes</label>
+        <input class="input" id="kbNote" placeholder="Opcional">
+      </div>
+      <div class="fldgroup">
+        <label class="fld">Coluna</label>
+        <select class="select" id="kbCol"></select>
+      </div>
+      <div class="actions">
+        <button class="btn danger" id="kbDelete" style="margin-right:auto; display:none;">Excluir</button>
+        <button class="btn ghost" id="kbCancel">Cancelar</button>
+        <button class="btn" id="kbSave">Adicionar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Tela de login -->
   <div class="overlay" id="authOverlay">
     <div class="cover">
@@ -564,7 +644,9 @@
   var db = {
     events: Store.read(NS+"events", []),
     tasks:  Store.read(NS+"tasks", []),
-    notes:  Store.read(NS+"notes", [])
+    notes:  Store.read(NS+"notes", []),
+    cards:  Store.read(NS+"cards", []),
+    writings: Store.read(NS+"writings", [])
   };
   function saveLocal(key){ Store.write(NS+key, db[key]); }
 
@@ -953,6 +1035,170 @@
   });
   document.getElementById("noteSearch").addEventListener("input", function(e){ noteSearch=e.target.value; renderNoteList(); });
 
+  /* ===================== QUADRO (Kanban) ===================== */
+  var KCOLS = ["A Fazer","Em Andamento","Concluído"];
+  var kbOverlay = document.getElementById("kbOverlay"), editingCardId = null;
+
+  (function(){
+    var sel=document.getElementById("kbCol");
+    sel.innerHTML = KCOLS.map(function(c,i){ return '<option value="'+i+'">'+c+'</option>'; }).join("");
+  })();
+
+  function renderKanban(){
+    var box=document.getElementById("kanban");
+    box.innerHTML = KCOLS.map(function(cn,ci){
+      var cards=db.cards.filter(function(c){ return (c.col||0)===ci; }).sort(function(a,b){ return (a.ord||0)-(b.ord||0); });
+      var inner = cards.map(function(c){
+        return '<div class="kcard" draggable="true" data-id="'+c.id+'">'
+          +'<div class="kc-title">'+escapeHtml(c.title)+'</div>'
+          +(c.note?'<div class="kc-note">'+escapeHtml(c.note)+'</div>':'')
+          +'<div class="kc-foot">'
+          +'<button class="kmini kc-left" title="Mover para a esquerda"'+(ci===0?' disabled':'')+'>‹</button>'
+          +'<button class="kmini kc-right" title="Mover para a direita"'+(ci===KCOLS.length-1?' disabled':'')+'>›</button>'
+          +'<div class="spacer"></div>'
+          +'<button class="kmini kc-edit" title="Editar">✎</button>'
+          +'</div></div>';
+      }).join("") || '<div class="empty" style="font-size:14px;padding:14px 6px;">Vazio</div>';
+      return '<div class="kcol" data-col="'+ci+'"><div class="kcol-head"><span class="kcol-title">'+cn+'</span>'
+        +'<button class="btn ghost sm kadd" data-col="'+ci+'" title="Novo cartão">+</button></div>'
+        +'<div class="kcol-body">'+inner+'</div></div>';
+    }).join("");
+
+    box.querySelectorAll(".kadd").forEach(function(b){
+      b.addEventListener("click", function(){ openCard(null, parseInt(b.dataset.col,10)); });
+    });
+    box.querySelectorAll(".kcard").forEach(function(el){
+      var id=el.dataset.id;
+      el.querySelector(".kc-edit").addEventListener("click", function(){ openCard(id); });
+      var left=el.querySelector(".kc-left"), right=el.querySelector(".kc-right");
+      if(left) left.addEventListener("click", function(){ moveCard(id,-1); });
+      if(right) right.addEventListener("click", function(){ moveCard(id,1); });
+      el.addEventListener("dragstart", function(e){ el.classList.add("dragging"); e.dataTransfer.setData("text/plain", id); });
+      el.addEventListener("dragend", function(){ el.classList.remove("dragging"); });
+    });
+    box.querySelectorAll(".kcol").forEach(function(col){
+      col.addEventListener("dragover", function(e){ e.preventDefault(); col.classList.add("dragover"); });
+      col.addEventListener("dragleave", function(){ col.classList.remove("dragover"); });
+      col.addEventListener("drop", function(e){
+        e.preventDefault(); col.classList.remove("dragover");
+        var id=e.dataTransfer.getData("text/plain");
+        dropCard(id, parseInt(col.dataset.col,10));
+      });
+    });
+  }
+  function nextOrd(col){
+    var m=0; db.cards.forEach(function(c){ if((c.col||0)===col && (c.ord||0)>m) m=c.ord; }); return m+1;
+  }
+  function moveCard(id, dir){
+    var c=db.cards.find(function(x){return x.id===id;});
+    var nc=(c.col||0)+dir; if(nc<0||nc>KCOLS.length-1) return;
+    c.col=nc; c.ord=nextOrd(nc); saveLocal("cards"); renderKanban();
+    mirror("upsert","cards",{id:c.id,col:c.col,title:c.title,note:c.note,ord:c.ord});
+  }
+  function dropCard(id, col){
+    var c=db.cards.find(function(x){return x.id===id;}); if(!c) return;
+    c.col=col; c.ord=nextOrd(col); saveLocal("cards"); renderKanban();
+    mirror("upsert","cards",{id:c.id,col:c.col,title:c.title,note:c.note,ord:c.ord});
+  }
+  function openCard(id, col){
+    editingCardId=id||null;
+    var del=document.getElementById("kbDelete");
+    if(id){
+      var c=db.cards.find(function(x){return x.id===id;});
+      document.getElementById("kbModalTitle").textContent="Editar cartão";
+      document.getElementById("kbTitle").value=c.title||"";
+      document.getElementById("kbNote").value=c.note||"";
+      document.getElementById("kbCol").value=c.col||0;
+      document.getElementById("kbSave").textContent="Salvar";
+      del.style.display="inline-block";
+    } else {
+      document.getElementById("kbModalTitle").textContent="Novo cartão";
+      document.getElementById("kbTitle").value="";
+      document.getElementById("kbNote").value="";
+      document.getElementById("kbCol").value=(col||0);
+      document.getElementById("kbSave").textContent="Adicionar";
+      del.style.display="none";
+    }
+    kbOverlay.classList.add("open");
+    document.getElementById("kbTitle").focus();
+  }
+  function closeCard(){ kbOverlay.classList.remove("open"); }
+  document.getElementById("kbCancel").addEventListener("click", closeCard);
+  kbOverlay.addEventListener("click", function(e){ if(e.target===kbOverlay) closeCard(); });
+  document.getElementById("kbSave").addEventListener("click", function(){
+    var title=document.getElementById("kbTitle").value.trim();
+    if(!title){ document.getElementById("kbTitle").focus(); return; }
+    var col=parseInt(document.getElementById("kbCol").value,10);
+    var note=document.getElementById("kbNote").value.trim(), payload;
+    if(editingCardId){
+      var c=db.cards.find(function(x){return x.id===editingCardId;});
+      c.title=title; c.note=note;
+      if(c.col!==col){ c.col=col; c.ord=nextOrd(col); }
+      payload={id:c.id,col:c.col,title:c.title,note:c.note,ord:c.ord};
+    } else {
+      var nc={id:uid(),col:col,title:title,note:note,ord:nextOrd(col)}; db.cards.push(nc); payload=nc;
+    }
+    saveLocal("cards"); closeCard(); renderKanban();
+    mirror("upsert","cards",payload);
+  });
+  document.getElementById("kbDelete").addEventListener("click", function(){
+    var id=editingCardId;
+    db.cards=db.cards.filter(function(x){return x.id!==id;});
+    saveLocal("cards"); closeCard(); renderKanban(); mirror("delete","cards",id);
+  });
+  document.getElementById("kbTitle").addEventListener("keydown", function(e){ if(e.key==="Enter") document.getElementById("kbSave").click(); });
+
+  /* ===================== CADERNO (escrita livre) ===================== */
+  var activeWriting=null, wTimer=null;
+  function renderWritingSelect(){
+    var sel=document.getElementById("wSelect");
+    var list=db.writings.slice().sort(function(a,b){ return (b.updated||0)-(a.updated||0); });
+    if(!list.length){ sel.innerHTML='<option value="">— nenhum texto —</option>'; sel.value=""; return; }
+    sel.innerHTML=list.map(function(w){ return '<option value="'+w.id+'">'+escapeHtml(w.title||"Sem título")+'</option>'; }).join("");
+    if(activeWriting && list.some(function(w){return w.id===activeWriting;})) sel.value=activeWriting;
+    else { activeWriting=list[0].id; sel.value=activeWriting; }
+  }
+  function countWords(s){ s=(s||"").trim(); return s? s.split(/\s+/).length : 0; }
+  function renderWriting(){
+    renderWritingSelect();
+    var ed=document.getElementById("wEditor");
+    if(!activeWriting){ ed.innerHTML='<div class="empty">Nenhum texto ainda. Clique em “Novo texto” para começar a escrever.</div>'; return; }
+    var w=db.writings.find(function(x){return x.id===activeWriting;});
+    if(!w){ ed.innerHTML='<div class="empty">Selecione um texto.</div>'; return; }
+    ed.innerHTML='<input class="writing-title" id="wTitle" placeholder="Título do texto" value="'+escapeAttr(w.title||"")+'">'
+      +'<textarea class="writing-body" id="wBody" placeholder="Escreva livremente…"></textarea>'
+      +'<div class="writing-count" id="wCount"></div>'
+      +'<div class="row" style="margin-top:10px;"><div class="spacer"></div><button class="btn danger sm" id="wDel">Excluir texto</button></div>';
+    document.getElementById("wBody").value=w.body||"";
+    function updateCount(){
+      var b=document.getElementById("wBody").value;
+      document.getElementById("wCount").textContent = countWords(b)+" palavras · "+b.length+" caracteres";
+    }
+    updateCount();
+    function persist(){
+      w.title=document.getElementById("wTitle").value;
+      w.body=document.getElementById("wBody").value;
+      w.updated=Date.now(); updateCount();
+      saveLocal("writings");
+      clearTimeout(wTimer);
+      wTimer=setTimeout(function(){ mirror("upsert","writings",{id:w.id,title:w.title,body:w.body,updated:w.updated}); }, 800);
+    }
+    document.getElementById("wTitle").addEventListener("input", function(){ persist(); document.getElementById("wSelect").querySelector('option[value="'+w.id+'"]').textContent=w.title||"Sem título"; });
+    document.getElementById("wBody").addEventListener("input", persist);
+    document.getElementById("wDel").addEventListener("click", function(){
+      var id=w.id;
+      db.writings=db.writings.filter(function(x){return x.id!==id;});
+      activeWriting=null; saveLocal("writings"); renderWriting(); mirror("delete","writings",id);
+    });
+  }
+  document.getElementById("wSelect").addEventListener("change", function(e){ activeWriting=e.target.value; renderWriting(); });
+  document.getElementById("wNew").addEventListener("click", function(){
+    var w={id:uid(),title:"",body:"",updated:Date.now()};
+    db.writings.push(w); activeWriting=w.id; saveLocal("writings"); renderWriting();
+    mirror("upsert","writings",{id:w.id,title:w.title,body:w.body,updated:w.updated});
+    setTimeout(function(){ var t=document.getElementById("wTitle"); if(t) t.focus(); },30);
+  });
+
   /* ===================== Login / boot ===================== */
   var authOverlay=document.getElementById("authOverlay"), authMode="login";
   function showAuth(){ authMode="login"; renderAuthMode(); authOverlay.classList.add("open"); document.getElementById("authEmail").focus(); }
@@ -995,11 +1241,11 @@
     document.getElementById("logoutBtn").style.display="inline-block";
     setSync("syncing");
     flushPending();
-    Promise.all([cloudList("events"), cloudList("tasks"), cloudList("notes")])
+    Promise.all([cloudList("events"), cloudList("tasks"), cloudList("notes"), cloudList("cards"), cloudList("writings")])
       .then(function(res){
-        db.events=res[0]||[]; db.tasks=res[1]||[]; db.notes=res[2]||[];
-        saveLocal("events"); saveLocal("tasks"); saveLocal("notes");
-        renderCalendar(); renderDay(); renderTasks(); renderNoteList();
+        db.events=res[0]||[]; db.tasks=res[1]||[]; db.notes=res[2]||[]; db.cards=res[3]||[]; db.writings=res[4]||[];
+        saveLocal("events"); saveLocal("tasks"); saveLocal("notes"); saveLocal("cards"); saveLocal("writings");
+        renderCalendar(); renderDay(); renderTasks(); renderNoteList(); renderKanban(); renderWriting();
         setSync(pending.length ? "offline" : "ok");
       })
       .catch(function(e){
@@ -1014,7 +1260,7 @@
   });
 
   /* primeira pintura com o cache local, depois decide login/nuvem */
-  renderCalendar(); renderDay(); renderTasks(); renderNoteList();
+  renderCalendar(); renderDay(); renderTasks(); renderNoteList(); renderKanban(); renderWriting();
   if(session && session.access_token){ bootCloud(); } else { setSync("off"); showAuth(); }
 
   /* registra o service worker (instalação / funcionamento offline) */
