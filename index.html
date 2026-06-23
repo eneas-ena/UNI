@@ -380,6 +380,14 @@
     white-space:pre-wrap; }
   .ai-result strong{ font-weight:600; color:var(--ink); }
 
+  /* ===== Calendários do Google ===== */
+  .ev.ext{ background:rgba(255,255,255,.18); border-style:dashed; }
+  .ev.ext .ext-tag{ font-size:13px; opacity:.5; align-self:center; }
+  .cal-row{ display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--paper-line); }
+  .cal-swatch{ width:14px; height:14px; border-radius:4px; flex:0 0 14px; }
+  .cal-nm{ flex:1; font-size:16px; }
+  .cal-toggle{ font-family:"Inter",sans-serif; font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:4px; cursor:pointer; }
+
   /* ===== QUADRO (Kanban) ===== */
   .kanban{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-items:start; }
   .kcol{ background:rgba(255,255,255,.22); border:1px solid var(--paper-line); border-radius:10px; padding:10px; min-height:120px; }
@@ -463,6 +471,7 @@
             <button class="btn ghost sm" id="calNext">›</button>
             <button class="btn ghost sm" id="calToday">Hoje</button>
             <div class="spacer"></div>
+            <button class="btn ghost sm" id="calMng">Calendários</button>
             <button class="btn" id="addEvent">+ Novo compromisso</button>
           </div>
           <div class="cal-grid" id="calDow"></div>
@@ -540,6 +549,7 @@
               <option value="assunto">Pesquisar assunto</option>
             </select>
             <button class="btn" id="aiGo">Gerar esboço</button>
+            <button class="btn ghost" id="aiClear">Limpar</button>
             <span class="ai-status" id="aiStatus"></span>
           </div>
           <div id="aiResult" class="ai-result" style="display:none;"></div>
@@ -641,6 +651,32 @@
     </div>
   </div>
 
+  <!-- Modal de calendários do Google -->
+  <div class="overlay" id="calOverlay">
+    <div class="modal">
+      <h3>Calendários do Google</h3>
+      <p class="ai-hint" style="margin:0 0 14px;">Cole o <strong>endereço secreto no formato iCal</strong> da agenda. No Google Agenda (no computador): Configurações do calendário → role até “Endereço secreto no formato iCal” → copie o link.</p>
+      <div id="calList" style="margin-bottom:14px;"></div>
+      <div class="fldgroup">
+        <label class="fld">Nome da agenda</label>
+        <input class="input" id="calName" placeholder="Ex.: Agenda da Igreja">
+      </div>
+      <div class="fldgroup">
+        <label class="fld">Endereço (.ics)</label>
+        <input class="input" id="calUrl" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics">
+      </div>
+      <div class="fldgroup">
+        <label class="fld">Cor</label>
+        <select class="select" id="calColor"></select>
+      </div>
+      <div id="calStatus" class="ai-status" style="min-height:18px; margin-bottom:6px;"></div>
+      <div class="actions">
+        <button class="btn ghost" id="calClose">Fechar</button>
+        <button class="btn" id="calAdd">Adicionar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Tela de login -->
   <div class="overlay" id="authOverlay">
     <div class="cover">
@@ -701,8 +737,15 @@
     tasks:  Store.read(NS+"tasks", []),
     notes:  Store.read(NS+"notes", []),
     cards:  Store.read(NS+"cards", []),
-    writings: Store.read(NS+"writings", [])
+    writings: Store.read(NS+"writings", []),
+    calendars: Store.read(NS+"calendars", [])
   };
+  var extEvents = Store.read(NS+"extevents", []);
+  var CAL_COLORS = { azul:"#3c4a63", verde:"#5a6b4a", vermelho:"#8C2B22", roxo:"#5e4a63", dourado:"#C19A4B", laranja:"#b5722e" };
+  function extOn(dateStr){
+    return extEvents.filter(function(e){ return e.date===dateStr; })
+      .sort(function(a,b){ return (a.time||"").localeCompare(b.time||""); });
+  }
   function saveLocal(key){ Store.write(NS+key, db[key]); }
 
   var session = Store.read(NS+"session", null);
@@ -883,8 +926,9 @@
     while(cells.length%7!==0){ var nd=cells.length-(start+daysInMonth)+1; cells.push({d:nd,out:true,date:ymd(new Date(y,m+1,nd))}); }
     var today=todayYmd(), html="";
     cells.forEach(function(c){
-      var evs=eventsOn(c.date), dots="";
+      var evs=eventsOn(c.date), ext=extOn(c.date), dots="";
       evs.slice(0,4).forEach(function(e){ dots+='<span class="dot" style="background:'+(COLORS[e.color]||COLORS.brass)+'"></span>'; });
+      ext.slice(0, Math.max(0,4-evs.length)).forEach(function(e){ dots+='<span class="dot" style="background:'+e.css+'"></span>'; });
       html+='<div class="cal-cell'+(c.out?' out':'')+(c.date===today?' today':'')+(c.date===selDay?' sel':'')
         +'" data-date="'+c.date+'"><span class="dn">'+c.d+'</span><div class="dots">'+dots+'</div></div>';
     });
@@ -895,14 +939,20 @@
   }
   function renderDay(){
     document.getElementById("dayTitle").textContent = "Compromissos — "+fmtLong(selDay);
-    var evs=eventsOn(selDay), box=document.getElementById("dayList");
-    if(!evs.length){ box.innerHTML='<div class="empty">Nenhum compromisso neste dia. Toque em “Novo compromisso” para começar.</div>'; return; }
-    box.innerHTML=evs.map(function(e){
+    var evs=eventsOn(selDay), ext=extOn(selDay), box=document.getElementById("dayList");
+    if(!evs.length && !ext.length){ box.innerHTML='<div class="empty">Nenhum compromisso neste dia. Toque em “Novo compromisso” para começar.</div>'; return; }
+    var ownHtml=evs.map(function(e){
       return '<div class="ev" data-id="'+e.id+'"><span class="bar" style="background:'+(COLORS[e.color]||COLORS.brass)+'"></span>'
         +'<span class="time">'+(e.time||"—")+'</span><div style="flex:1"><div class="ti">'+escapeHtml(e.title)+'</div>'
         +(e.note?'<div class="nt">'+escapeHtml(e.note)+'</div>':'')+'</div></div>';
     }).join("");
-    box.querySelectorAll(".ev").forEach(function(el){ el.addEventListener("click", function(){ openEvent(el.dataset.id); }); });
+    var extHtml=ext.map(function(e){
+      return '<div class="ev ext"><span class="bar" style="background:'+e.css+'"></span>'
+        +'<span class="time">'+(e.time||"—")+'</span><div style="flex:1"><div class="ti">'+escapeHtml(e.title)+'</div>'
+        +'<div class="nt">'+escapeHtml(e.cal)+'</div></div><span class="ext-tag">🔒</span></div>';
+    }).join("");
+    box.innerHTML=ownHtml+extHtml;
+    box.querySelectorAll(".ev:not(.ext)").forEach(function(el){ el.addEventListener("click", function(){ openEvent(el.dataset.id); }); });
   }
 
   var evOverlay=document.getElementById("evOverlay"), editingEventId=null;
@@ -1361,6 +1411,14 @@
       aiStatus.textContent=String(e.message||e);
     }).then(function(){ aiGo.disabled=false; });
   });
+  document.getElementById("aiClear").addEventListener("click", function(){
+    document.getElementById("aiInput").value="";
+    aiResult.style.display="none"; aiResult.innerHTML="";
+    aiActions.style.display="none";
+    aiStatus.className="ai-status"; aiStatus.textContent="";
+    aiLast="";
+    document.getElementById("aiInput").focus();
+  });
 
   document.getElementById("aiCopy").addEventListener("click", function(){
     if(navigator.clipboard && navigator.clipboard.writeText){
@@ -1381,6 +1439,186 @@
     document.getElementById("mod-caderno").classList.add("active");
     renderWriting();
     var b=document.getElementById("aiSave"); b.textContent="Salvo!"; setTimeout(function(){ b.textContent="Salvar no Caderno"; },1500);
+  });
+
+  /* ===================== CALENDÁRIOS DO GOOGLE (iCal) ===================== */
+  var calOverlay=document.getElementById("calOverlay");
+  var DOW_CODE={SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6};
+
+  function icalUnfold(text){ return text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/\n[ \t]/g,""); }
+  function parseLine(line){
+    var i=line.indexOf(":"); if(i<0) return null;
+    var left=line.slice(0,i), value=line.slice(i+1);
+    var parts=left.split(";"); var name=parts[0].toUpperCase(); var params={};
+    for(var k=1;k<parts.length;k++){ var p=parts[k].split("="); params[p[0].toUpperCase()]=(p[1]||""); }
+    return { name:name, params:params, value:value };
+  }
+  function parseICalDate(value, params){
+    value=(value||"").trim();
+    var isDate = (params && /DATE/i.test(params.VALUE||"")) || /^\d{8}$/.test(value);
+    var m=value.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?/);
+    if(!m) return null;
+    var y=+m[1], mo=+m[2], da=+m[3], h=m[4]!=null?+m[4]:null, mi=m[5]!=null?+m[5]:0, isZ=!!m[7];
+    if(isDate || h===null){ return { date:y+"-"+pad(mo)+"-"+pad(da), time:null }; }
+    if(isZ){
+      var d=new Date(Date.UTC(y,mo-1,da,h,mi,0));
+      return { date:d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()), time:pad(d.getHours())+":"+pad(d.getMinutes()) };
+    }
+    return { date:y+"-"+pad(mo)+"-"+pad(da), time:pad(h)+":"+pad(mi) };
+  }
+  function parseRRULE(s){
+    var r={}; (s||"").replace(/^RRULE:/i,"").split(";").forEach(function(kv){ var p=kv.split("="); if(p[0]) r[p[0].toUpperCase()]=p[1]; });
+    return {
+      FREQ:(r.FREQ||"").toUpperCase(),
+      INTERVAL:r.INTERVAL?parseInt(r.INTERVAL,10):1,
+      COUNT:r.COUNT?parseInt(r.COUNT,10):null,
+      UNTIL:r.UNTIL? r.UNTIL.slice(0,8).replace(/(\d{4})(\d{2})(\d{2})/,"$1-$2-$3") : null,
+      BYDAY:r.BYDAY? r.BYDAY.split(",").map(function(d){ return DOW_CODE[d.replace(/^[+-]?\d*/,"").toUpperCase()]; }).filter(function(x){ return x!=null; }) : null
+    };
+  }
+  function expandRRULE(start, rule, winS, winE){
+    var out=[], emitted=0, cap=700, iter=0;
+    function y2(dt){ return dt.getFullYear()+"-"+pad(dt.getMonth()+1)+"-"+pad(dt.getDate()); }
+    function within(dt){ return dt>=winS && dt<=winE; }
+    function passUntil(dt){ return !rule.UNTIL || y2(dt)<=rule.UNTIL; }
+    var iv=rule.INTERVAL||1;
+    if(rule.FREQ==="WEEKLY" && rule.BYDAY && rule.BYDAY.length){
+      var cur=new Date(start.y,start.m-1,start.d);
+      var weekStart=new Date(cur); weekStart.setDate(weekStart.getDate()-weekStart.getDay());
+      while(iter++<6000){
+        for(var i=0;i<rule.BYDAY.length;i++){
+          var dt=new Date(weekStart); dt.setDate(dt.getDate()+rule.BYDAY[i]);
+          if(dt>=cur && passUntil(dt)){
+            if(rule.COUNT && emitted>=rule.COUNT) return out;
+            if(dt>winE) return out;
+            if(within(dt)) out.push(y2(dt));
+            emitted++; if(emitted>cap) return out;
+          }
+        }
+        weekStart.setDate(weekStart.getDate()+7*iv);
+        if(weekStart>winE) break;
+      }
+      return out;
+    }
+    var c=new Date(start.y,start.m-1,start.d);
+    while(iter++<6000){
+      if(rule.COUNT && emitted>=rule.COUNT) break;
+      if(!passUntil(c)) break;
+      if(c>winE) break;
+      if(within(c)) out.push(y2(c));
+      emitted++; if(emitted>cap) break;
+      if(rule.FREQ==="DAILY") c.setDate(c.getDate()+iv);
+      else if(rule.FREQ==="WEEKLY") c.setDate(c.getDate()+7*iv);
+      else if(rule.FREQ==="MONTHLY") c.setMonth(c.getMonth()+iv);
+      else if(rule.FREQ==="YEARLY") c.setFullYear(c.getFullYear()+iv);
+      else break;
+    }
+    return out;
+  }
+  function parseICS(text, winS, winE){
+    text=icalUnfold(text);
+    var lines=text.split("\n");
+    var winSs=ymd(winS), winEs=ymd(winE);
+    var events=[], inEv=false, cur=null;
+    for(var i=0;i<lines.length;i++){
+      var ln=lines[i]; if(!ln) continue;
+      if(/^BEGIN:VEVENT/i.test(ln)){ inEv=true; cur={}; continue; }
+      if(/^END:VEVENT/i.test(ln)){
+        if(cur && cur.start){
+          var title=cur.summary||"(sem título)";
+          if(cur.rrule){
+            var sc=cur.start.date.split("-");
+            var dates=expandRRULE({y:+sc[0],m:+sc[1],d:+sc[2]}, parseRRULE(cur.rrule), winS, winE);
+            dates.forEach(function(ds){ events.push({date:ds, time:cur.start.time, title:title}); });
+          } else if(cur.start.date>=winSs && cur.start.date<=winEs){
+            events.push({date:cur.start.date, time:cur.start.time, title:title});
+          }
+        }
+        inEv=false; cur=null; continue;
+      }
+      if(!inEv) continue;
+      var p=parseLine(ln); if(!p) continue;
+      if(p.name==="DTSTART") cur.start=parseICalDate(p.value,p.params);
+      else if(p.name==="SUMMARY") cur.summary=p.value.replace(/\\,/g,",").replace(/\\n/gi," ").replace(/\\;/g,";").trim();
+      else if(p.name==="RRULE") cur.rrule=p.value;
+    }
+    return events;
+  }
+
+  function fetchCalendars(){
+    var enabled=db.calendars.filter(function(c){ return c.enabled!==false; });
+    if(!enabled.length){ extEvents=[]; Store.write(NS+"extevents",extEvents); renderCalendar(); renderDay(); return; }
+    var now=new Date();
+    var winS=new Date(now.getFullYear(), now.getMonth()-1, 1);
+    var winE=new Date(now.getFullYear(), now.getMonth()+7, 0);
+    setSync("syncing");
+    Promise.all(enabled.map(function(c){
+      return fetch(WORKER_URL+"/ical", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:c.url}) })
+        .then(function(r){ return r.text(); })
+        .then(function(t){
+          if(t.indexOf("BEGIN:VCALENDAR")<0) return [];
+          return parseICS(t, winS, winE).map(function(e){ e.css=CAL_COLORS[c.color]||CAL_COLORS.azul; e.cal=c.name; return e; });
+        })
+        .catch(function(){ return []; });
+    })).then(function(lists){
+      extEvents=[].concat.apply([], lists);
+      Store.write(NS+"extevents", extEvents);
+      renderCalendar(); renderDay();
+      setSync(pending.length?"offline":"ok");
+    });
+  }
+
+  function renderCalList(){
+    var box=document.getElementById("calList");
+    if(!db.calendars.length){ box.innerHTML='<div class="empty" style="font-size:14px;padding:10px;">Nenhuma agenda adicionada ainda.</div>'; return; }
+    box.innerHTML=db.calendars.map(function(c){
+      return '<div class="cal-row" data-id="'+c.id+'">'
+        +'<span class="cal-swatch" style="background:'+(CAL_COLORS[c.color]||CAL_COLORS.azul)+'"></span>'
+        +'<span class="cal-nm">'+escapeHtml(c.name)+'</span>'
+        +'<label class="cal-toggle"><input type="checkbox" class="cal-en"'+(c.enabled!==false?' checked':'')+'> ver</label>'
+        +'<button class="btn danger sm cal-rm">remover</button></div>';
+    }).join("");
+    box.querySelectorAll(".cal-row").forEach(function(row){
+      var id=row.dataset.id;
+      row.querySelector(".cal-en").addEventListener("change", function(e){
+        var c=db.calendars.find(function(x){return x.id===id;}); c.enabled=e.target.checked;
+        saveLocal("calendars"); mirror("upsert","calendars",{id:c.id,name:c.name,url:c.url,color:c.color,enabled:c.enabled});
+        fetchCalendars();
+      });
+      row.querySelector(".cal-rm").addEventListener("click", function(){
+        db.calendars=db.calendars.filter(function(x){return x.id!==id;});
+        saveLocal("calendars"); mirror("delete","calendars",id); renderCalList(); fetchCalendars();
+      });
+    });
+  }
+  (function(){
+    var sel=document.getElementById("calColor");
+    sel.innerHTML=Object.keys(CAL_COLORS).map(function(k){ return '<option value="'+k+'">'+k.charAt(0).toUpperCase()+k.slice(1)+'</option>'; }).join("");
+  })();
+  document.getElementById("calMng").addEventListener("click", function(){ renderCalList(); document.getElementById("calStatus").textContent=""; calOverlay.classList.add("open"); });
+  document.getElementById("calClose").addEventListener("click", function(){ calOverlay.classList.remove("open"); });
+  calOverlay.addEventListener("click", function(e){ if(e.target===calOverlay) calOverlay.classList.remove("open"); });
+  document.getElementById("calAdd").addEventListener("click", function(){
+    var name=document.getElementById("calName").value.trim();
+    var url=document.getElementById("calUrl").value.trim();
+    var color=document.getElementById("calColor").value;
+    var st=document.getElementById("calStatus");
+    if(!name || !url){ st.textContent="Preencha o nome e o endereço."; return; }
+    if(!/^https:\/\//i.test(url)){ st.textContent="O endereço deve começar com https://"; return; }
+    st.textContent="Testando o endereço…";
+    fetch(WORKER_URL+"/ical", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:url}) })
+      .then(function(r){ return r.text(); })
+      .then(function(t){
+        if(t.indexOf("BEGIN:VCALENDAR")<0){ st.textContent="Não consegui ler essa agenda. Confira se é o link iCal (.ics) e tente de novo."; return; }
+        var c={ id:uid(), name:name, url:url, color:color, enabled:true };
+        db.calendars.push(c); saveLocal("calendars");
+        mirror("upsert","calendars",{id:c.id,name:c.name,url:c.url,color:c.color,enabled:c.enabled});
+        document.getElementById("calName").value=""; document.getElementById("calUrl").value="";
+        st.textContent="Agenda adicionada!";
+        renderCalList(); fetchCalendars();
+        setTimeout(function(){ st.textContent=""; },2000);
+      })
+      .catch(function(){ st.textContent="Falha ao buscar. Verifique sua conexão e o endereço."; });
   });
 
   /* ===================== Login / boot ===================== */
@@ -1440,12 +1678,13 @@
     document.getElementById("lockBtn").style.display="inline-block";
     setSync("syncing");
     flushPending();
-    Promise.all([cloudList("events"), cloudList("tasks"), cloudList("notes"), cloudList("cards"), cloudList("writings")])
+    Promise.all([cloudList("events"), cloudList("tasks"), cloudList("notes"), cloudList("cards"), cloudList("writings"), cloudList("calendars")])
       .then(function(res){
-        db.events=res[0]||[]; db.tasks=res[1]||[]; db.notes=res[2]||[]; db.cards=res[3]||[]; db.writings=res[4]||[];
-        saveLocal("events"); saveLocal("tasks"); saveLocal("notes"); saveLocal("cards"); saveLocal("writings");
+        db.events=res[0]||[]; db.tasks=res[1]||[]; db.notes=res[2]||[]; db.cards=res[3]||[]; db.writings=res[4]||[]; db.calendars=res[5]||[];
+        saveLocal("events"); saveLocal("tasks"); saveLocal("notes"); saveLocal("cards"); saveLocal("writings"); saveLocal("calendars");
         renderCalendar(); renderDay(); renderTasks(); renderNoteList(); renderKanban(); renderWriting();
         setSync(pending.length ? "offline" : "ok");
+        fetchCalendars();
       })
       .catch(function(e){
         if(/sem sessão|refresh|400|401/i.test(String(e.message||e))){ logout(); return; }
