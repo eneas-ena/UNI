@@ -387,6 +387,11 @@
   .cal-swatch{ width:14px; height:14px; border-radius:4px; flex:0 0 14px; }
   .cal-nm{ flex:1; font-size:16px; }
   .cal-toggle{ font-family:"Inter",sans-serif; font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:4px; cursor:pointer; }
+  .cal-row.editing{ gap:8px; }
+  .cal-legend{ display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:14px; }
+  .cal-legend .lg{ display:flex; align-items:center; gap:6px; font-family:"Inter",sans-serif; font-size:12px; color:var(--ink-soft); }
+  .cal-legend .lg-h{ color:var(--ink-faint); }
+  .cal-legend .lg .sw{ width:12px; height:12px; border-radius:3px; flex:0 0 12px; }
 
   /* ===== QUADRO (Kanban) ===== */
   .kanban{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-items:start; }
@@ -476,6 +481,7 @@
           </div>
           <div class="cal-grid" id="calDow"></div>
           <div class="cal-grid" id="calGrid" style="margin-top:6px;"></div>
+          <div class="cal-legend" id="calLegend"></div>
 
           <div class="day-panel">
             <div class="section-title" id="dayTitle">Compromissos</div>
@@ -1547,7 +1553,7 @@
 
   function fetchCalendars(){
     var enabled=db.calendars.filter(function(c){ return c.enabled!==false; });
-    if(!enabled.length){ extEvents=[]; Store.write(NS+"extevents",extEvents); renderCalendar(); renderDay(); return; }
+    if(!enabled.length){ extEvents=[]; Store.write(NS+"extevents",extEvents); renderCalendar(); renderDay(); renderLegend(); return; }
     var now=new Date();
     var winS=new Date(now.getFullYear(), now.getMonth()-1, 1);
     var winE=new Date(now.getFullYear(), now.getMonth()+7, 0);
@@ -1563,33 +1569,67 @@
     })).then(function(lists){
       extEvents=[].concat.apply([], lists);
       Store.write(NS+"extevents", extEvents);
-      renderCalendar(); renderDay();
+      renderCalendar(); renderDay(); renderLegend();
       setSync(pending.length?"offline":"ok");
     });
   }
 
+  var editingCalId=null;
+  function calColorOptions(selected){
+    return Object.keys(CAL_COLORS).map(function(k){
+      return '<option value="'+k+'"'+(k===selected?' selected':'')+'>'+k.charAt(0).toUpperCase()+k.slice(1)+'</option>';
+    }).join("");
+  }
   function renderCalList(){
     var box=document.getElementById("calList");
     if(!db.calendars.length){ box.innerHTML='<div class="empty" style="font-size:14px;padding:10px;">Nenhuma agenda adicionada ainda.</div>'; return; }
     box.innerHTML=db.calendars.map(function(c){
+      if(editingCalId===c.id){
+        return '<div class="cal-row editing" data-id="'+c.id+'">'
+          +'<input class="input cal-ed-name" value="'+escapeAttr(c.name)+'" style="flex:1; min-width:0;">'
+          +'<select class="select cal-ed-color" style="max-width:110px;">'+calColorOptions(c.color)+'</select>'
+          +'<button class="btn sm cal-ok">salvar</button>'
+          +'<button class="btn ghost sm cal-cancel">cancelar</button></div>';
+      }
       return '<div class="cal-row" data-id="'+c.id+'">'
         +'<span class="cal-swatch" style="background:'+(CAL_COLORS[c.color]||CAL_COLORS.azul)+'"></span>'
         +'<span class="cal-nm">'+escapeHtml(c.name)+'</span>'
         +'<label class="cal-toggle"><input type="checkbox" class="cal-en"'+(c.enabled!==false?' checked':'')+'> ver</label>'
+        +'<button class="btn ghost sm cal-edit">editar</button>'
         +'<button class="btn danger sm cal-rm">remover</button></div>';
     }).join("");
     box.querySelectorAll(".cal-row").forEach(function(row){
       var id=row.dataset.id;
+      var c=db.calendars.find(function(x){ return x.id===id; });
+      if(editingCalId===id){
+        row.querySelector(".cal-ok").addEventListener("click", function(){
+          var nm=row.querySelector(".cal-ed-name").value.trim();
+          if(nm) c.name=nm; c.color=row.querySelector(".cal-ed-color").value;
+          saveLocal("calendars"); mirror("upsert","calendars",{id:c.id,name:c.name,url:c.url,color:c.color,enabled:c.enabled});
+          editingCalId=null; renderCalList(); fetchCalendars();
+        });
+        row.querySelector(".cal-cancel").addEventListener("click", function(){ editingCalId=null; renderCalList(); });
+        return;
+      }
       row.querySelector(".cal-en").addEventListener("change", function(e){
-        var c=db.calendars.find(function(x){return x.id===id;}); c.enabled=e.target.checked;
+        c.enabled=e.target.checked;
         saveLocal("calendars"); mirror("upsert","calendars",{id:c.id,name:c.name,url:c.url,color:c.color,enabled:c.enabled});
         fetchCalendars();
       });
+      row.querySelector(".cal-edit").addEventListener("click", function(){ editingCalId=id; renderCalList(); });
       row.querySelector(".cal-rm").addEventListener("click", function(){
-        db.calendars=db.calendars.filter(function(x){return x.id!==id;});
+        db.calendars=db.calendars.filter(function(x){ return x.id!==id; });
         saveLocal("calendars"); mirror("delete","calendars",id); renderCalList(); fetchCalendars();
       });
     });
+  }
+  function renderLegend(){
+    var box=document.getElementById("calLegend"); if(!box) return;
+    var act=db.calendars.filter(function(c){ return c.enabled!==false; });
+    if(!act.length){ box.innerHTML=""; return; }
+    box.innerHTML='<span class="lg lg-h">Agendas:</span>'+act.map(function(c){
+      return '<span class="lg"><span class="sw" style="background:'+(CAL_COLORS[c.color]||CAL_COLORS.azul)+'"></span>'+escapeHtml(c.name)+'</span>';
+    }).join("");
   }
   (function(){
     var sel=document.getElementById("calColor");
@@ -1698,7 +1738,7 @@
   });
 
   /* primeira pintura com o cache local, depois decide login/nuvem */
-  renderCalendar(); renderDay(); renderTasks(); renderNoteList(); renderKanban(); renderWriting();
+  renderCalendar(); renderDay(); renderTasks(); renderNoteList(); renderKanban(); renderWriting(); renderLegend();
   if(session && session.access_token){ bootCloud(); } else { setSync("off"); showAuth(); }
 
   /* registra o service worker (instalação / funcionamento offline) */
