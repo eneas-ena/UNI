@@ -392,6 +392,8 @@
   .cal-legend .lg{ display:flex; align-items:center; gap:6px; font-family:"Inter",sans-serif; font-size:12px; color:var(--ink-soft); }
   .cal-legend .lg-h{ color:var(--ink-faint); }
   .cal-legend .lg .sw{ width:12px; height:12px; border-radius:3px; flex:0 0 12px; }
+  .cal-legend .lg-cal{ cursor:pointer; }
+  .cal-legend .lg-cal.off{ opacity:.4; text-decoration:line-through; }
 
   /* ===== QUADRO (Kanban) ===== */
   .kanban{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-items:start; }
@@ -1625,11 +1627,27 @@
   }
   function renderLegend(){
     var box=document.getElementById("calLegend"); if(!box) return;
-    var act=db.calendars.filter(function(c){ return c.enabled!==false; });
-    if(!act.length){ box.innerHTML=""; return; }
-    box.innerHTML='<span class="lg lg-h">Agendas:</span>'+act.map(function(c){
-      return '<span class="lg"><span class="sw" style="background:'+(CAL_COLORS[c.color]||CAL_COLORS.azul)+'"></span>'+escapeHtml(c.name)+'</span>';
-    }).join("");
+    var html='<span class="lg lg-h">UNI:</span>';
+    [["seal","Culto"],["indigo","Reunião"],["sage","Pessoal"],["brass","Estudo"]].forEach(function(c){
+      html+='<span class="lg"><span class="sw" style="background:'+COLORS[c[0]]+'"></span>'+c[1]+'</span>';
+    });
+    if(db.calendars.length){
+      html+='<span class="lg lg-h" style="margin-left:6px;">Google:</span>';
+      db.calendars.forEach(function(c){
+        var off=(c.enabled===false);
+        html+='<span class="lg lg-cal'+(off?' off':'')+'" data-id="'+c.id+'" title="Tocar para mostrar ou ocultar">'
+          +'<span class="sw" style="background:'+(CAL_COLORS[c.color]||CAL_COLORS.azul)+'"></span>'+escapeHtml(c.name)+'</span>';
+      });
+    }
+    box.innerHTML=html;
+    box.querySelectorAll(".lg-cal").forEach(function(el){
+      el.addEventListener("click", function(){
+        var c=db.calendars.find(function(x){ return x.id===el.dataset.id; });
+        c.enabled=(c.enabled===false);
+        saveLocal("calendars"); mirror("upsert","calendars",{id:c.id,name:c.name,url:c.url,color:c.color,enabled:c.enabled});
+        fetchCalendars();
+      });
+    });
   }
   (function(){
     var sel=document.getElementById("calColor");
