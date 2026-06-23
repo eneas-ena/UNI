@@ -302,13 +302,16 @@
     .binder{ flex-direction:column; padding:14px; min-height:auto; margin:12px auto; }
     .binder::after{ inset:7px; }
     .tabs{
-      flex-direction:row; flex:none; gap:7px; padding:4px 6px 12px; width:100%;
-      justify-content:center; flex-wrap:wrap;
+      flex-direction:row; flex:none; gap:6px; padding:4px 6px 12px; width:100%;
+      justify-content:center; flex-wrap:nowrap;
     }
     .tab{
       writing-mode:horizontal-tb; min-height:0; width:auto; margin-left:0;
-      border-radius:9px; padding:9px 13px; font-size:11px; letter-spacing:.08em;
+      border-radius:9px 9px 0 0; padding:10px 4px; font-size:12px; letter-spacing:.1em;
+      flex:1 1 0; text-align:center;
     }
+    .tab-full{ display:none; }
+    .tab-abbr{ display:inline; }
     .tab.active{ transform:translateY(-2px); }
     .page{ border-radius:8px; }
     .page-head{ padding:16px 16px 12px; }
@@ -316,6 +319,7 @@
     .cal-cell{ min-height:54px; }
     .notes-wrap{ grid-template-columns:1fr; }
     .notes-list{ border-right:none; border-bottom:1px solid var(--paper-line); padding-right:0; padding-bottom:12px; max-height:200px; }
+    .kanban{ grid-template-columns:1fr; }
   }
   @media (max-width:480px){
     .brand .name{ font-size:21px; }
@@ -363,6 +367,7 @@
   /* ===== Cores das novas abas ===== */
   .tab[data-mod="quadro"]{ --tab-color:#3f4d5e; }
   .tab[data-mod="caderno"]{ --tab-color:#5e4a63; }
+  .tab-abbr{ display:none; }
 
   /* ===== QUADRO (Kanban) ===== */
   .kanban{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-items:start; }
@@ -400,11 +405,11 @@
 <body>
   <main class="binder">
     <nav class="tabs" aria-label="Seções">
-      <button class="tab active" data-mod="agenda">Agenda</button>
-      <button class="tab" data-mod="tarefas">Tarefas</button>
-      <button class="tab" data-mod="notas">Notas</button>
-      <button class="tab" data-mod="quadro">Quadro</button>
-      <button class="tab" data-mod="caderno">Caderno</button>
+      <button class="tab active" data-mod="agenda"><span class="tab-full">Agenda</span><span class="tab-abbr">AGE</span></button>
+      <button class="tab" data-mod="tarefas"><span class="tab-full">Tarefas</span><span class="tab-abbr">TAR</span></button>
+      <button class="tab" data-mod="notas"><span class="tab-full">Notas</span><span class="tab-abbr">NOT</span></button>
+      <button class="tab" data-mod="quadro"><span class="tab-full">Quadro</span><span class="tab-abbr">QUA</span></button>
+      <button class="tab" data-mod="caderno"><span class="tab-full">Caderno</span><span class="tab-abbr">CAD</span></button>
     </nav>
 
     <section class="page">
