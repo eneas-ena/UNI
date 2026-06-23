@@ -400,6 +400,16 @@
     line-height:34px; padding-top:3px; }
   .writing-count{ font-family:"Inter",sans-serif; font-size:12px; color:var(--ink-faint); text-align:right;
     margin-top:8px; letter-spacing:.02em; }
+  /* ==== Responsivo (override final — precisa vir por último para vencer a cascata) ==== */
+  @media (max-width:820px){
+    .tab-full{ display:inline; }
+    .tab-abbr{ display:none; }
+  }
+  @media (max-width:600px){
+    .tab-full{ display:none; }
+    .tab-abbr{ display:inline; }
+    .kanban{ grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body>
