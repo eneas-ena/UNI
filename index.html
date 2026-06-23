@@ -367,7 +367,18 @@
   /* ===== Cores das novas abas ===== */
   .tab[data-mod="quadro"]{ --tab-color:#3f4d5e; }
   .tab[data-mod="caderno"]{ --tab-color:#5e4a63; }
+  .tab[data-mod="estudo"]{ --tab-color:#6d5a30; }
   .tab-abbr{ display:none; }
+
+  /* ===== ESTUDO (ajudante de IA) ===== */
+  .ai-hint{ font-size:15px; color:var(--ink-soft); font-style:italic; margin:0 0 16px; line-height:1.45; max-width:640px; }
+  textarea.input{ resize:vertical; font-family:"Cormorant Garamond",serif; min-height:72px; line-height:1.45; }
+  .ai-status{ font-family:"Inter",sans-serif; font-size:13px; font-weight:500; color:var(--ink-soft); }
+  .ai-status.err{ color:var(--seal); }
+  .ai-result{ background:rgba(255,255,255,.45); border:1px solid var(--paper-line); border-radius:10px;
+    padding:18px 20px; font-family:"Cormorant Garamond",serif; font-size:19px; line-height:1.65; color:var(--ink);
+    white-space:pre-wrap; }
+  .ai-result strong{ font-weight:600; color:var(--ink); }
 
   /* ===== QUADRO (Kanban) ===== */
   .kanban{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-items:start; }
@@ -420,6 +431,7 @@
       <button class="tab" data-mod="notas"><span class="tab-full">Notas</span><span class="tab-abbr">NOT</span></button>
       <button class="tab" data-mod="quadro"><span class="tab-full">Quadro</span><span class="tab-abbr">QUA</span></button>
       <button class="tab" data-mod="caderno"><span class="tab-full">Caderno</span><span class="tab-abbr">CAD</span></button>
+      <button class="tab" data-mod="estudo"><span class="tab-full">Estudo</span><span class="tab-abbr">EST</span></button>
     </nav>
 
     <section class="page">
@@ -509,6 +521,31 @@
             <button class="btn" id="wNew">+ Novo texto</button>
           </div>
           <div id="wEditor"></div>
+        </div>
+
+        <!-- ESTUDO (ajudante de IA) -->
+        <div class="mod" id="mod-estudo">
+          <div class="section-title">Ajudante de estudo</div>
+          <p class="ai-hint">Cole um versículo, um tema ou uma anotação, escolha o tipo, e o ajudante prepara um esboço para você revisar e completar. <em>Confira sempre as referências bíblicas antes de usar.</em></p>
+          <div class="fldgroup">
+            <label class="fld">Versículo, tema ou anotação</label>
+            <textarea class="input" id="aiInput" rows="3" placeholder="Ex.: Filipenses 4.6-7 — a paz de Deus &#10;ou: A importância da gratidão na vida cristã"></textarea>
+          </div>
+          <div class="row" style="gap:10px; margin-bottom:14px;">
+            <select class="select" id="aiKind" style="max-width:220px;">
+              <option value="sermao">Esboço de sermão</option>
+              <option value="estudo">Estudo bíblico</option>
+              <option value="devocional">Devocional</option>
+            </select>
+            <button class="btn" id="aiGo">Gerar esboço</button>
+            <span class="ai-status" id="aiStatus"></span>
+          </div>
+          <div id="aiResult" class="ai-result" style="display:none;"></div>
+          <div id="aiActions" class="row" style="display:none; gap:10px; margin-top:12px;">
+            <div class="spacer"></div>
+            <button class="btn ghost sm" id="aiCopy">Copiar</button>
+            <button class="btn sm" id="aiSave">Salvar no Caderno</button>
+          </div>
         </div>
 
       </div>
@@ -637,6 +674,7 @@
   var SUPA_KEY = "sb_publishable_qXCYqg1WdmelY9D1mptZXg_U8NdoKby";
   var REST = SUPA_URL + "/rest/v1/";
   var AUTH = SUPA_URL + "/auth/v1/";
+  var WORKER_URL = "https://uni-ia.eneaspr.workers.dev";
 
   /* ===================== Armazenamento local ===================== */
   var Store = (function(){
@@ -1212,6 +1250,101 @@
     db.writings.push(w); activeWriting=w.id; saveLocal("writings"); renderWriting();
     mirror("upsert","writings",{id:w.id,title:w.title,body:w.body,updated:w.updated});
     setTimeout(function(){ var t=document.getElementById("wTitle"); if(t) t.focus(); },30);
+  });
+
+  /* ===================== ESTUDO (ajudante de IA) ===================== */
+  var AI_BASE = "Você é o assistente de estudos de um pastor e bispo evangélico brasileiro, de formação batista e pentecostal. "
+    + "Escreve sempre em português do Brasil, com tom reverente, claro e pastoral, fiel às Escrituras Sagradas. "
+    + "IMPORTANTE: cite apenas referências bíblicas que você tem certeza de que existem e correspondem ao conteúdo; "
+    + "nunca invente versículos, números de capítulo ou versículo, nem citações. Quando não tiver certeza da referência exata, "
+    + "descreva a passagem sem forçar um número. O material é um ponto de partida para o pastor revisar e completar. "
+    + "Use ** ** para destacar os títulos das seções.";
+  var AI_KIND = {
+    sermao: "Prepare um ESBOÇO DE SERMÃO a partir do tema ou texto fornecido. Estrutura: **Título**; **Texto base** (com a referência); "
+      + "**Introdução** (curta); de 2 a 4 **Pontos principais**, cada um com uma breve explicação e uma ou duas referências de apoio; "
+      + "**Aplicação prática**; **Conclusão e apelo**.",
+    estudo: "Prepare um ESTUDO BÍBLICO a partir do tema ou texto fornecido. Estrutura: **Tema**; **Texto base**; **Contexto** (breve); "
+      + "**Desenvolvimento** em 3 a 4 tópicos com explicação e referências; **Perguntas para reflexão** (3 a 4); **Aplicação**.",
+    devocional: "Prepare um DEVOCIONAL curto a partir do tema ou texto fornecido. Estrutura: **Título**; **Versículo** (com a referência); "
+      + "**Reflexão** (2 a 3 parágrafos); **Aplicação para hoje**; **Oração** breve."
+  };
+  var aiLast = "";
+
+  function aiRenderMd(s){
+    var h = (s||"").replace(/[&<>]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c]; });
+    h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    return h;
+  }
+  function callAI(system, userText){
+    return fetch(WORKER_URL, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6",
+        max_tokens:2000,
+        system:system,
+        messages:[{ role:"user", content:userText }]
+      })
+    }).then(function(r){
+      return r.json().catch(function(){ throw new Error("Resposta inesperada do servidor."); }).then(function(data){
+        if(data && data.error){
+          var m = (typeof data.error==="string") ? data.error : (data.error.message || "Erro na IA.");
+          if(/credit|balance|insufficient/i.test(m)) throw new Error("Os créditos da API parecem ter acabado. Confira o saldo no Console da Anthropic.");
+          if(/not authorized|origem/i.test(m)) throw new Error("O porteiro recusou a chamada. Confira o endereço liberado no Worker.");
+          throw new Error(m);
+        }
+        if(!data || !data.content) throw new Error("A IA não retornou conteúdo.");
+        var txt = data.content.filter(function(b){ return b.type==="text"; }).map(function(b){ return b.text; }).join("\n").trim();
+        if(!txt) throw new Error("A resposta veio vazia.");
+        return txt;
+      });
+    });
+  }
+
+  var aiStatus=document.getElementById("aiStatus"),
+      aiResult=document.getElementById("aiResult"),
+      aiActions=document.getElementById("aiActions"),
+      aiGo=document.getElementById("aiGo");
+
+  aiGo.addEventListener("click", function(){
+    var text=document.getElementById("aiInput").value.trim();
+    if(!text){ document.getElementById("aiInput").focus(); return; }
+    var kind=document.getElementById("aiKind").value;
+    var system=AI_BASE+"\n\n"+AI_KIND[kind];
+    aiStatus.className="ai-status"; aiStatus.textContent="Preparando…";
+    aiResult.style.display="none"; aiActions.style.display="none";
+    aiGo.disabled=true;
+    callAI(system, text).then(function(txt){
+      aiLast=txt;
+      aiResult.innerHTML=aiRenderMd(txt);
+      aiResult.style.display="block";
+      aiActions.style.display="flex";
+      aiStatus.textContent="";
+    }).catch(function(e){
+      aiStatus.className="ai-status err";
+      aiStatus.textContent=String(e.message||e);
+    }).then(function(){ aiGo.disabled=false; });
+  });
+
+  document.getElementById("aiCopy").addEventListener("click", function(){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(aiLast).then(function(){
+        var b=document.getElementById("aiCopy"); var t=b.textContent; b.textContent="Copiado!"; setTimeout(function(){ b.textContent=t; },1500);
+      }).catch(function(){});
+    }
+  });
+  document.getElementById("aiSave").addEventListener("click", function(){
+    var firstLine=(aiLast.split("\n").find(function(l){ return l.trim(); })||"Estudo").replace(/\*\*/g,"").trim().slice(0,60);
+    var w={ id:uid(), title:firstLine, body:aiLast, updated:Date.now() };
+    db.writings.push(w); activeWriting=w.id; saveLocal("writings");
+    mirror("upsert","writings",{id:w.id,title:w.title,body:w.body,updated:w.updated});
+    // leva para o Caderno já com o texto aberto
+    tabs.forEach(function(x){ x.classList.remove("active"); });
+    document.querySelector('.tab[data-mod="caderno"]').classList.add("active");
+    document.querySelectorAll(".mod").forEach(function(m){ m.classList.remove("active"); });
+    document.getElementById("mod-caderno").classList.add("active");
+    renderWriting();
+    var b=document.getElementById("aiSave"); b.textContent="Salvo!"; setTimeout(function(){ b.textContent="Salvar no Caderno"; },1500);
   });
 
   /* ===================== Login / boot ===================== */
