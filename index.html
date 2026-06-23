@@ -488,6 +488,29 @@
     </div>
   </div>
 
+  <!-- Tela de login -->
+  <div class="overlay" id="authOverlay">
+    <div class="modal auth-modal">
+      <div class="auth-badge">UNI</div>
+      <h3 id="authTitle">Entrar no UNI</h3>
+      <p class="auth-sub">Use o mesmo e-mail e senha em todos os seus aparelhos para ver tudo sincronizado.</p>
+      <div class="fldgroup">
+        <label class="fld">E-mail</label>
+        <input class="input" id="authEmail" type="email" autocomplete="username" placeholder="voce@exemplo.com">
+      </div>
+      <div class="fldgroup">
+        <label class="fld">Senha</label>
+        <input class="input" id="authPass" type="password" autocomplete="current-password" placeholder="mínimo 6 caracteres">
+      </div>
+      <div id="authErr" class="auth-err"></div>
+      <button class="btn" id="authPrimary" style="width:100%;">Entrar</button>
+      <div class="auth-toggle">
+        <span id="authToggleText">Ainda não tem conta?</span>
+        <button class="btn ghost sm" id="authToggle">Criar conta</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 (function(){
   "use strict";
@@ -979,27 +1002,5 @@
 
 </script>
 
-  <!-- Tela de login -->
-  <div class="overlay" id="authOverlay">
-    <div class="modal auth-modal">
-      <div class="auth-badge">UNI</div>
-      <h3 id="authTitle">Entrar no UNI</h3>
-      <p class="auth-sub">Use o mesmo e-mail e senha em todos os seus aparelhos para ver tudo sincronizado.</p>
-      <div class="fldgroup">
-        <label class="fld">E-mail</label>
-        <input class="input" id="authEmail" type="email" autocomplete="username" placeholder="voce@exemplo.com">
-      </div>
-      <div class="fldgroup">
-        <label class="fld">Senha</label>
-        <input class="input" id="authPass" type="password" autocomplete="current-password" placeholder="mínimo 6 caracteres">
-      </div>
-      <div id="authErr" class="auth-err"></div>
-      <button class="btn" id="authPrimary" style="width:100%;">Entrar</button>
-      <div class="auth-toggle">
-        <span id="authToggleText">Ainda não tem conta?</span>
-        <button class="btn ghost sm" id="authToggle">Criar conta</button>
-      </div>
-    </div>
-  </div>
 </body>
 </html>
