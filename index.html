@@ -946,6 +946,80 @@
     return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">'
       +'<head><meta charset="utf-8"><title>'+wordEsc(title||"Texto")+'</title></head><body>'+h1+blocks+'</body></html>';
   }
+  /* gera um .docx moderno de verdade (pacote OOXML zipado, sem bibliotecas) */
+  function crc32(bytes){
+    var table=crc32._t;
+    if(!table){ table=crc32._t=[]; for(var n=0;n<256;n++){ var c=n; for(var k=0;k<8;k++){ c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); } table[n]=c>>>0; } }
+    var crc=0^(-1);
+    for(var i=0;i<bytes.length;i++){ crc=(crc>>>8)^table[(crc^bytes[i])&0xFF]; }
+    return (crc^(-1))>>>0;
+  }
+  function makeZip(files){
+    var chunks=[], central=[], offset=0, enc=new TextEncoder();
+    function u16(n){ return new Uint8Array([n&0xFF,(n>>>8)&0xFF]); }
+    function u32(n){ return new Uint8Array([n&0xFF,(n>>>8)&0xFF,(n>>>16)&0xFF,(n>>>24)&0xFF]); }
+    function push(a){ chunks.push(a); offset+=a.length; }
+    files.forEach(function(f){
+      var nameB=enc.encode(f.name), data=f.data, crc=crc32(data), local=offset;
+      push(u32(0x04034b50)); push(u16(20)); push(u16(0x0800)); push(u16(0));
+      push(u16(0)); push(u16(0)); push(u32(crc)); push(u32(data.length)); push(u32(data.length));
+      push(u16(nameB.length)); push(u16(0)); push(nameB); push(data);
+      central.push({n:nameB,crc:crc,sz:data.length,off:local});
+    });
+    var cdStart=offset;
+    central.forEach(function(c){
+      push(u32(0x02014b50)); push(u16(20)); push(u16(20)); push(u16(0x0800)); push(u16(0));
+      push(u16(0)); push(u16(0)); push(u32(c.crc)); push(u32(c.sz)); push(u32(c.sz));
+      push(u16(c.n.length)); push(u16(0)); push(u16(0)); push(u16(0)); push(u16(0));
+      push(u32(0)); push(u32(c.off)); push(c.n);
+    });
+    var cdSize=offset-cdStart;
+    push(u32(0x06054b50)); push(u16(0)); push(u16(0)); push(u16(central.length)); push(u16(central.length));
+    push(u32(cdSize)); push(u32(cdStart)); push(u16(0));
+    var total=0; chunks.forEach(function(c){ total+=c.length; });
+    var out=new Uint8Array(total), p=0;
+    chunks.forEach(function(c){ out.set(c,p); p+=c.length; });
+    return out;
+  }
+  function docxEsc(s){ return (s||"").replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
+  function docxPara(text, o){
+    o=o||{};
+    var rpr=(o.bold||o.size)?("<w:rPr>"+(o.bold?"<w:b/>":"")+(o.size?'<w:sz w:val="'+o.size+'"/><w:szCs w:val="'+o.size+'"/>':"")+"</w:rPr>"):"";
+    var ppr=o.before?('<w:pPr><w:spacing w:before="'+o.before+'"/></w:pPr>'):"";
+    if(!text) return "<w:p/>";
+    return "<w:p>"+ppr+"<w:r>"+rpr+'<w:t xml:space="preserve">'+docxEsc(text)+"</w:t></w:r></w:p>";
+  }
+  function buildDocx(title, body){
+    var paras=[];
+    if(title) paras.push(docxPara(title,{bold:true,size:36}));
+    (body||"").split(/\n/).forEach(function(line){
+      var t=line.trim();
+      if(!t){ paras.push("<w:p/>"); return; }
+      if(t.length<=60 && t===t.toLocaleUpperCase() && /[A-ZÀ-Ý]/.test(t)) paras.push(docxPara(t,{bold:true,size:26,before:200}));
+      else paras.push(docxPara(line,{size:24}));
+    });
+    var doc='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+      +paras.join("")
+      +'<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417"/></w:sectPr>'
+      +'</w:body></w:document>';
+    var ct='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      +'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+      +'<Default Extension="xml" ContentType="application/xml"/>'
+      +'<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+      +'</Types>';
+    var rels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+      +'</Relationships>';
+    var enc=new TextEncoder();
+    return makeZip([
+      {name:"[Content_Types].xml", data:enc.encode(ct)},
+      {name:"_rels/.rels", data:enc.encode(rels)},
+      {name:"word/document.xml", data:enc.encode(doc)}
+    ]);
+  }
   function makeBackup(){
     return JSON.stringify({
       app:"UNI", version:1, exported:new Date().toISOString(),
@@ -1841,7 +1915,7 @@
   document.getElementById("wExport").addEventListener("click", function(){
     var w=db.writings.find(function(x){return x.id===activeWriting;});
     if(!w){ return; }
-    download(safeName(w.title||"texto",".doc"), buildWordDoc(w.title||"", w.body||""), "application/msword");
+    download(safeName(w.title||"texto",".docx"), buildDocx(w.title||"", w.body||""), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
   });
   document.getElementById("wNew").addEventListener("click", function(){
     var w={id:uid(),title:"",body:"",updated:Date.now()};
