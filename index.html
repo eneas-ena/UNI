@@ -380,6 +380,18 @@
     white-space:pre-wrap; }
   .ai-result strong{ font-weight:600; color:var(--ink); }
 
+  /* ===== Caixinha "escrever e virar compromisso" ===== */
+  .ai-quick{ background:rgba(58,42,28,.05); border:1px solid var(--paper-edge); border-radius:10px; padding:12px; margin-bottom:16px; }
+  .aiq-row{ display:flex; gap:8px; align-items:flex-start; }
+  #aiqText{ flex:1; resize:vertical; min-height:48px; font-family:"Inter",sans-serif; }
+  .aiq-mic{ flex:0 0 auto; font-size:18px; line-height:1; padding:10px 13px; }
+  .aiq-mic.rec{ background:var(--seal); color:#fff; border-color:var(--seal); animation:pulseRec 1s infinite; }
+  @keyframes pulseRec{ 0%,100%{ filter:brightness(1);} 50%{ filter:brightness(1.3);} }
+  .aiq-hint{ font-size:11px; color:var(--ink-faint); margin:9px 2px 0; line-height:1.5; }
+  .aiq-hint b{ font-weight:600; color:var(--ink-soft); }
+  .aiq-actions{ display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .aiq-status{ font-size:12px; }
+
   /* ===== Calendários do Google ===== */
   .ev.ext{ background:rgba(255,255,255,.18); border-style:dashed; }
   .ev.ext .ext-tag{ font-size:13px; opacity:.5; align-self:center; }
@@ -582,6 +594,17 @@
   <div class="overlay" id="evOverlay">
     <div class="modal">
       <h3 id="evModalTitle">Novo compromisso</h3>
+      <div class="ai-quick" id="aiQuick">
+        <div class="aiq-row">
+          <textarea class="input" id="aiqText" rows="2" placeholder="Ex.: Reunião de líderes quinta às 20h sobre o discipulado"></textarea>
+          <button class="btn ghost aiq-mic" id="aiqMic" title="Ditar pelo microfone" aria-label="Ditar pelo microfone">🎤</button>
+        </div>
+        <div class="aiq-hint">a IA monta o compromisso — diga o que souber: <b>título</b> · <b>data</b> · <b>horário</b> · <b>categoria</b> · <b>observação</b></div>
+        <div class="aiq-actions">
+          <button class="btn sm" id="aiqGo">Interpretar</button>
+          <span class="aiq-status ai-status" id="aiqStatus"></span>
+        </div>
+      </div>
       <div class="fldgroup">
         <label class="fld">Título</label>
         <input class="input" id="evTitle" placeholder="Ex.: Culto da noite">
@@ -981,6 +1004,7 @@
       document.getElementById("evTime").value=e.time||"";
       document.getElementById("evColor").value=e.color||"seal";
       document.getElementById("evNote").value=e.note||"";
+      document.getElementById("aiQuick").style.display="none";
       del.style.display="inline-block";
     } else {
       document.getElementById("evModalTitle").textContent="Novo compromisso";
@@ -989,6 +1013,8 @@
       document.getElementById("evTime").value="";
       document.getElementById("evColor").value="seal";
       document.getElementById("evNote").value="";
+      document.getElementById("aiQuick").style.display="block";
+      aiqReset();
       del.style.display="none";
     }
     evOverlay.classList.add("open");
@@ -1020,6 +1046,72 @@
     db.events=db.events.filter(function(x){return x.id!==id;});
     saveLocal("events"); closeEvent(); renderCalendar(); renderDay();
     mirror("delete","events",id);
+  });
+
+  /* ===== Caixinha: linguagem natural + microfone ===== */
+  var aiqText=document.getElementById("aiqText"), aiqStatus=document.getElementById("aiqStatus"), aiqMic=document.getElementById("aiqMic");
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var recog=null, recording=false;
+  function aiqReset(){
+    aiqText.value=""; aiqStatus.className="aiq-status ai-status"; aiqStatus.textContent="";
+    if(recording && recog){ try{ recog.stop(); }catch(e){} }
+    recording=false; aiqMic.classList.remove("rec");
+  }
+  aiqMic.addEventListener("click", function(){
+    if(!SR){
+      aiqText.focus();
+      aiqStatus.className="aiq-status ai-status";
+      aiqStatus.textContent="Toque no 🎤 do teclado do seu aparelho para ditar.";
+      return;
+    }
+    if(recording){ try{ recog.stop(); }catch(e){} return; }
+    recog=new SR(); recog.lang="pt-BR"; recog.interimResults=true; recog.continuous=false;
+    var base = aiqText.value ? aiqText.value.replace(/\s+$/,"")+" " : "";
+    recog.onresult=function(e){
+      var t=""; for(var i=e.resultIndex;i<e.results.length;i++){ t+=e.results[i][0].transcript; }
+      aiqText.value=base+t;
+    };
+    recog.onerror=function(){ recording=false; aiqMic.classList.remove("rec"); aiqStatus.textContent=""; };
+    recog.onend=function(){ recording=false; aiqMic.classList.remove("rec"); if(aiqStatus.textContent==="Ouvindo…") aiqStatus.textContent=""; };
+    try{ recog.start(); recording=true; aiqMic.classList.add("rec"); aiqStatus.className="aiq-status ai-status"; aiqStatus.textContent="Ouvindo…"; }
+    catch(e){ recording=false; aiqMic.classList.remove("rec"); }
+  });
+  document.getElementById("aiqGo").addEventListener("click", function(){
+    var frase=aiqText.value.trim();
+    if(!frase){ aiqText.focus(); return; }
+    if(recording && recog){ try{ recog.stop(); }catch(e){} }
+    var go=document.getElementById("aiqGo"); go.disabled=true;
+    aiqStatus.className="aiq-status ai-status"; aiqStatus.textContent="Interpretando…";
+    var hoje=new Date();
+    var dows=["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"];
+    var hojeStr=hoje.getFullYear()+"-"+pad(hoje.getMonth()+1)+"-"+pad(hoje.getDate());
+    var sys="Você transforma uma frase em português em um compromisso de agenda. "
+      +"Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem marcações de código. "
+      +"Campos: "
+      +'"title" (título curto e claro do compromisso), '
+      +'"date" (data no formato AAAA-MM-DD; resolva expressões como amanhã, sexta, dia 28 usando a data de hoje; se a frase citar só o dia da semana, use a PRÓXIMA ocorrência futura; se não houver data, use hoje), '
+      +'"time" (horário HH:MM em 24 horas, ou "" se não houver), '
+      +'"color" (escolha exatamente uma: "seal" para culto, pregação, ministério, ceia; "indigo" para reunião, liderança, conselho, aconselhamento; "sage" para pessoal, família, médico, descanso; "brass" para estudo, escrita, preparação de sermão, leitura), '
+      +'"note" (detalhes citados como assunto, local ou pessoa; "" se não houver). '
+      +"Hoje é "+dows[hoje.getDay()]+", "+hojeStr+".";
+    callAI(sys, frase).then(function(txt){
+      var clean=txt.replace(/```json/gi,"").replace(/```/g,"").trim();
+      var j=null;
+      try{ j=JSON.parse(clean); }catch(e){
+        var m=clean.match(/\{[\s\S]*\}/); if(m){ try{ j=JSON.parse(m[0]); }catch(e2){} }
+      }
+      if(!j){ aiqStatus.className="aiq-status ai-status err"; aiqStatus.textContent="Não consegui entender. Tente reescrever."; return; }
+      if(j.title) document.getElementById("evTitle").value=j.title;
+      if(/^\d{4}-\d{2}-\d{2}$/.test(j.date||"")) document.getElementById("evDate").value=j.date;
+      document.getElementById("evTime").value=/^\d{2}:\d{2}$/.test(j.time||"")?j.time:"";
+      var cores=["seal","indigo","sage","brass"];
+      document.getElementById("evColor").value=cores.indexOf(j.color)>=0?j.color:"seal";
+      document.getElementById("evNote").value=j.note||"";
+      aiqStatus.className="aiq-status ai-status"; aiqStatus.textContent="Pronto! Confira abaixo e toque em Salvar.";
+      document.getElementById("evTitle").focus();
+    }).catch(function(err){
+      aiqStatus.className="aiq-status ai-status err"; aiqStatus.textContent=(err&&err.message)||"Falha ao interpretar.";
+    }).then(function(){ go.disabled=false; });
   });
   document.getElementById("calPrev").addEventListener("click", function(){ calCursor.setMonth(calCursor.getMonth()-1); renderCalendar(); });
   document.getElementById("calNext").addEventListener("click", function(){ calCursor.setMonth(calCursor.getMonth()+1); renderCalendar(); });
