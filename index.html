@@ -1518,9 +1518,13 @@
     document.getElementById("ideaDevSave").style.display="none";
     stt.className="ai-status"; stt.textContent="Desenvolvendo…";
     ideaDevOverlay.classList.add("open");
-    callAI(devPromptFor(n.tag||"geral"), n.body||"").then(function(txt){
-      ideaDevLast=txt;
-      res.innerHTML=aiRenderMd(txt); res.style.display="block";
+    callAIStream(devPromptFor(n.tag||"geral"), n.body||"", function(partial){
+      ideaDevLast=partial;
+      res.innerHTML=aiRenderMd(partial); res.style.display="block";
+      stt.textContent="";
+    }).then(function(full){
+      ideaDevLast=full;
+      res.innerHTML=aiRenderMd(full); res.style.display="block";
       stt.textContent="";
       document.getElementById("ideaDevCopy").style.display="inline-block";
       document.getElementById("ideaDevSave").style.display="inline-block";
@@ -1769,7 +1773,7 @@
     }
     return "Estudo";
   }
-  function callAI(system, userText){
+  function callAI(system, userText, _retry){
     return fetch(WORKER_URL, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
@@ -1792,6 +1796,71 @@
         if(!txt) throw new Error("A resposta veio vazia.");
         return txt;
       });
+    }).catch(function(err){
+      var m=String((err&&err.message)||err);
+      if(!_retry && /Load failed|Failed to fetch|NetworkError|network|conex/i.test(m)){
+        return new Promise(function(res){ setTimeout(res,800); }).then(function(){ return callAI(system,userText,true); });
+      }
+      if(/Load failed|Failed to fetch|NetworkError/i.test(m)) throw new Error("A conexão falhou. Tente novamente.");
+      throw err;
+    });
+  }
+  // Versão em fluxo (streaming): o texto chega aos poucos; mantém a conexão viva no Safari do iPhone.
+  function callAIStream(system, userText, onDelta){
+    return fetch(WORKER_URL, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6",
+        max_tokens:2000,
+        system:system,
+        stream:true,
+        messages:[{ role:"user", content:userText }]
+      })
+    }).then(function(r){
+      if(!r.ok){
+        return r.text().then(function(t){
+          var m="Erro na IA."; try{ var j=JSON.parse(t); m=(j.error&&(j.error.message||j.error))||m; }catch(e){}
+          if(/credit|balance|insufficient/i.test(m)) m="Os créditos da API parecem ter acabado. Confira o saldo no Console da Anthropic.";
+          throw new Error(typeof m==="string"?m:"Erro na IA.");
+        });
+      }
+      if(!r.body || !r.body.getReader){ return callAI(system,userText).then(function(txt){ onDelta(txt); return txt; }); }
+      var reader=r.body.getReader(), dec=new TextDecoder(), buf="", full="", raw="";
+      function pump(){
+        return reader.read().then(function(res){
+          if(res.done){
+            if(!full && raw){
+              try{
+                var j=JSON.parse(raw.trim());
+                if(j && j.error){ var em=(j.error.message||j.error); throw new Error(typeof em==="string"?em:"Erro na IA."); }
+                if(j && j.content){ full=j.content.filter(function(b){return b.type==="text";}).map(function(b){return b.text;}).join("\n").trim(); if(full) onDelta(full); }
+              }catch(e){ if(/Erro na IA|créditos/i.test(String(e.message))) throw e; }
+            }
+            return full;
+          }
+          var piece=dec.decode(res.value,{stream:true});
+          buf+=piece; raw+=piece;
+          var idx;
+          while((idx=buf.indexOf("\n"))>=0){
+            var line=buf.slice(0,idx).replace(/\r$/,""); buf=buf.slice(idx+1);
+            if(line.indexOf("data:")!==0) continue;
+            var data=line.slice(5).trim();
+            if(!data || data==="[DONE]") continue;
+            try{
+              var ev=JSON.parse(data);
+              if(ev.type==="content_block_delta" && ev.delta && ev.delta.text){ full+=ev.delta.text; onDelta(full); }
+              else if(ev.type==="error" && ev.error){ throw new Error(ev.error.message||"Erro da IA."); }
+            }catch(e){ if(/Erro da IA|créditos/i.test(String(e.message))) throw e; }
+          }
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function(err){
+      var m=String((err&&err.message)||err);
+      if(/Load failed|Failed to fetch|NetworkError|network/i.test(m)) throw new Error("A conexão caiu durante a resposta. Tente novamente.");
+      throw err;
     });
   }
 
@@ -1808,9 +1877,14 @@
     aiStatus.className="ai-status"; aiStatus.textContent="Preparando…";
     aiResult.style.display="none"; aiActions.style.display="none";
     aiGo.disabled=true;
-    callAI(system, text).then(function(txt){
-      aiLast=txt;
-      aiResult.innerHTML=aiRenderMd(txt);
+    callAIStream(system, text, function(partial){
+      aiLast=partial;
+      aiResult.innerHTML=aiRenderMd(partial);
+      aiResult.style.display="block";
+      aiStatus.textContent="";
+    }).then(function(full){
+      aiLast=full;
+      aiResult.innerHTML=aiRenderMd(full);
       aiResult.style.display="block";
       aiActions.style.display="flex";
       aiStatus.textContent="";
