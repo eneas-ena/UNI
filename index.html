@@ -245,6 +245,18 @@
   .pri.media{ background:rgba(195,154,75,.22); color:#8a6e34; }
   .pri.baixa{ background:rgba(90,107,74,.18); color:var(--sage); }
   .filters{ display:flex; gap:6px; margin-bottom:14px; }
+  /* ===== Tarefas agrupadas por dia ===== */
+  .daygrp{ border-radius:12px; padding:10px 12px 4px; margin-bottom:14px; }
+  .daygrp-h{ font-family:"Cinzel",serif; font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); margin:2px 2px 10px; }
+  .daygrp .task{ background:rgba(255,255,255,.55); }
+  .daygrp.g-past{ background:rgba(140,43,34,.07); }
+  .daygrp.g-past .daygrp-h{ color:var(--seal); }
+  .daygrp.g-today{ background:rgba(195,154,75,.14); }
+  .daygrp.g-tom{ background:rgba(90,107,74,.12); }
+  .daygrp.g-d2{ background:rgba(60,74,99,.12); }
+  .daygrp.g-later{ background:rgba(58,42,28,.05); }
+  .t-time{ font-family:"Inter",sans-serif; font-size:12px; font-weight:600; color:var(--ink-soft); margin-right:6px; white-space:nowrap; }
+  .undo-link{ color:var(--seal); cursor:pointer; text-decoration:underline; }
   .filters .btn.active{ outline:2px solid var(--brass-dim); }
 
   /* ===== NOTAS ===== */
@@ -516,6 +528,17 @@
             <div class="spacer"></div>
             <button class="btn" id="addTask">+ Nova tarefa</button>
           </div>
+          <div class="ai-quick" id="taskQuick">
+            <div class="aiq-row">
+              <textarea class="input" id="taskqText" rows="2" placeholder="Ex.: ligar para o diácono, comprar material do estudo amanhã, visitar a irmã Maria depois de amanhã às 15h"></textarea>
+              <button class="btn ghost aiq-mic" id="taskqMic" title="Ditar pelo microfone" aria-label="Ditar pelo microfone">🎤</button>
+            </div>
+            <div class="aiq-hint">a IA separa por dia (hoje · amanhã · depois) — diga: <b>o que fazer</b> · <b>dia</b> · <b>hora</b> · <b>prioridade</b></div>
+            <div class="aiq-actions">
+              <button class="btn sm" id="taskqGo">Organizar</button>
+              <span class="aiq-status ai-status" id="taskqStatus"></span>
+            </div>
+          </div>
           <div class="filters" id="taskFilters">
             <button class="btn ghost sm active" data-f="pendentes">Pendentes</button>
             <button class="btn ghost sm" data-f="todas">Todas</button>
@@ -647,6 +670,16 @@
       <div class="fldgroup">
         <label class="fld">O que precisa ser feito</label>
         <input class="input" id="tkTitle" placeholder="Ex.: Preparar estudo de quarta">
+      </div>
+      <div class="grid2">
+        <div class="fldgroup">
+          <label class="fld">Dia</label>
+          <input class="input" id="tkDate" type="date">
+        </div>
+        <div class="fldgroup">
+          <label class="fld">Hora</label>
+          <input class="input" id="tkTime" type="time">
+        </div>
       </div>
       <div class="fldgroup">
         <label class="fld">Prioridade</label>
@@ -930,6 +963,8 @@
   function pad(n){ return (n<10?"0":"")+n; }
   function ymd(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
   function todayYmd(){ return ymd(new Date()); }
+  function ymdPlus(n){ var d=new Date(); d.setDate(d.getDate()+n); return ymd(d); }
+  var DOWFULL=["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"];
   function fmtLong(s){ var p=s.split("-"); var d=new Date(+p[0],+p[1]-1,+p[2]); return DOW[d.getDay()]+", "+(+p[2])+" de "+MESES[+p[1]-1]; }
 
   (function(){
@@ -1120,26 +1155,50 @@
   /* ===================== TAREFAS ===================== */
   var taskFilter="pendentes", tkOverlay=document.getElementById("tkOverlay"), editingTaskId=null;
   function renderTasks(){
-    var list=db.tasks.slice().sort(function(a,b){
-      var order={alta:0,media:1,baixa:2};
-      if(a.done!==b.done) return a.done?1:-1;
-      return order[a.pri]-order[b.pri];
-    });
+    var list=db.tasks.slice();
     if(taskFilter==="pendentes") list=list.filter(function(t){return !t.done;});
     if(taskFilter==="concluidas") list=list.filter(function(t){return t.done;});
     var box=document.getElementById("taskList");
-    if(!list.length){ box.innerHTML='<div class="empty">Sua lista está limpa. Adicione a primeira tarefa.</div>'; return; }
-    box.innerHTML=list.map(function(t){
-      return '<div class="task'+(t.done?' done':'')+'" data-id="'+t.id+'"><div class="check" title="Concluir">✓</div>'
-        +'<span class="t-title" title="Tocar para editar">'+escapeHtml(t.title)+'</span>'
-        +'<span class="pri '+t.pri+'">'+t.pri+'</span><button class="btn danger sm t-del" title="Excluir">✕</button></div>';
-    }).join("");
+    if(!list.length){ box.innerHTML='<div class="empty">Nenhuma tarefa aqui. Use a caixinha acima para a IA organizar, ou “+ Nova tarefa”.</div>'; return; }
+    var today=ymdPlus(0), d1=ymdPlus(1), d2=ymdPlus(2);
+    var groups=[
+      {cls:"g-past",  test:function(ds){return ds<today;},  head:(taskFilter==="concluidas"?"Dias anteriores":"Atrasadas"), items:[]},
+      {cls:"g-today", test:function(ds){return ds===today;}, head:"Hoje", items:[]},
+      {cls:"g-tom",   test:function(ds){return ds===d1;},    head:"Amanhã", items:[]},
+      {cls:"g-d2",    test:function(ds){return ds===d2;},    head:DOWFULL[new Date(d2+"T00:00:00").getDay()], items:[]},
+      {cls:"g-later", test:function(ds){return ds>d2;},      head:"Mais adiante", items:[]}
+    ];
+    var order={alta:0,media:1,baixa:2};
+    list.forEach(function(t){
+      var ds=t.date||today;
+      for(var i=0;i<groups.length;i++){ if(groups[i].test(ds)){ groups[i].items.push(t); break; } }
+    });
+    function sortItems(arr){ arr.sort(function(a,b){
+      if(a.done!==b.done) return a.done?1:-1;
+      var ta=a.time||"99:99", tb=b.time||"99:99";
+      if(ta!==tb) return ta.localeCompare(tb);
+      return order[a.pri]-order[b.pri];
+    }); }
+    var html="";
+    groups.forEach(function(g){
+      if(!g.items.length) return;
+      sortItems(g.items);
+      html+='<div class="daygrp '+g.cls+'"><div class="daygrp-h">'+g.head+'</div>'
+        +g.items.map(function(t){
+          return '<div class="task'+(t.done?' done':'')+'" data-id="'+t.id+'"><div class="check" title="Concluir">✓</div>'
+            +'<span class="t-title" title="Tocar para editar">'+escapeHtml(t.title)+'</span>'
+            +(t.time?'<span class="t-time">'+t.time+'</span>':'')
+            +'<span class="pri '+t.pri+'">'+t.pri+'</span><button class="btn danger sm t-del" title="Excluir">✕</button></div>';
+        }).join("")
+        +'</div>';
+    });
+    box.innerHTML=html;
     box.querySelectorAll(".task").forEach(function(el){
       var id=el.dataset.id;
       el.querySelector(".check").addEventListener("click", function(){
         var t=db.tasks.find(function(x){return x.id===id;});
         t.done=!t.done; saveLocal("tasks"); renderTasks();
-        mirror("upsert","tasks",{id:t.id,title:t.title,pri:t.pri,done:t.done});
+        mirror("upsert","tasks",{id:t.id,title:t.title,pri:t.pri,done:t.done,date:t.date||"",time:t.time||""});
       });
       el.querySelector(".t-title").addEventListener("click", function(){ openTask(id); });
       el.querySelector(".t-del").addEventListener("click", function(){
@@ -1155,12 +1214,16 @@
       var t=db.tasks.find(function(x){return x.id===id;});
       document.getElementById("tkModalTitle").textContent="Editar tarefa";
       document.getElementById("tkTitle").value=t.title||"";
+      document.getElementById("tkDate").value=t.date||todayYmd();
+      document.getElementById("tkTime").value=t.time||"";
       document.getElementById("tkPri").value=t.pri||"media";
       document.getElementById("tkSave").textContent="Salvar";
       del.style.display="inline-block";
     } else {
       document.getElementById("tkModalTitle").textContent="Nova tarefa";
       document.getElementById("tkTitle").value="";
+      document.getElementById("tkDate").value=todayYmd();
+      document.getElementById("tkTime").value="";
       document.getElementById("tkPri").value="media";
       document.getElementById("tkSave").textContent="Adicionar";
       del.style.display="none";
@@ -1182,11 +1245,14 @@
     var title=document.getElementById("tkTitle").value.trim();
     if(!title){ document.getElementById("tkTitle").focus(); return; }
     var pri=document.getElementById("tkPri").value, payload;
+    var tkDate=document.getElementById("tkDate").value||todayYmd();
+    var tkTime=document.getElementById("tkTime").value||"";
     if(editingTaskId){
       var t=db.tasks.find(function(x){return x.id===editingTaskId;});
-      t.title=title; t.pri=pri; payload={id:t.id,title:t.title,pri:t.pri,done:t.done};
+      t.title=title; t.pri=pri; t.date=tkDate; t.time=tkTime;
+      payload={id:t.id,title:t.title,pri:t.pri,done:t.done,date:t.date,time:t.time};
     } else {
-      var nt={id:uid(),title:title,pri:pri,done:false}; db.tasks.push(nt); payload=nt;
+      var nt={id:uid(),title:title,pri:pri,done:false,date:tkDate,time:tkTime}; db.tasks.push(nt); payload=nt;
     }
     saveLocal("tasks"); closeTask(); renderTasks();
     mirror("upsert","tasks",payload);
@@ -1197,6 +1263,74 @@
     saveLocal("tasks"); closeTask(); renderTasks(); mirror("delete","tasks",id);
   });
   document.getElementById("tkTitle").addEventListener("keydown", function(e){ if(e.key==="Enter") document.getElementById("tkSave").click(); });
+
+  /* ===== Caixinha: organizar tarefas com IA + microfone ===== */
+  function setupMic(textarea, btn, statusEl){
+    var SR2 = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var rec=null, on=false;
+    btn.addEventListener("click", function(){
+      if(!SR2){ textarea.focus(); statusEl.className="aiq-status ai-status"; statusEl.textContent="Toque no 🎤 do teclado do seu aparelho para ditar."; return; }
+      if(on){ try{ rec.stop(); }catch(e){} return; }
+      rec=new SR2(); rec.lang="pt-BR"; rec.interimResults=true; rec.continuous=false;
+      var base=textarea.value?textarea.value.replace(/\s+$/,"")+" ":"";
+      rec.onresult=function(e){ var t=""; for(var i=e.resultIndex;i<e.results.length;i++){ t+=e.results[i][0].transcript; } textarea.value=base+t; };
+      rec.onerror=function(){ on=false; btn.classList.remove("rec"); statusEl.textContent=""; };
+      rec.onend=function(){ on=false; btn.classList.remove("rec"); if(statusEl.textContent==="Ouvindo…") statusEl.textContent=""; };
+      try{ rec.start(); on=true; btn.classList.add("rec"); statusEl.className="aiq-status ai-status"; statusEl.textContent="Ouvindo…"; }catch(e){ on=false; btn.classList.remove("rec"); }
+    });
+    return { stop:function(){ if(on&&rec){ try{rec.stop();}catch(e){} } } };
+  }
+  var taskqText=document.getElementById("taskqText"), taskqStatus=document.getElementById("taskqStatus");
+  var taskMic=setupMic(taskqText, document.getElementById("taskqMic"), taskqStatus);
+  var lastTaskBatch=[];
+  document.getElementById("taskqGo").addEventListener("click", function(){
+    var frase=taskqText.value.trim();
+    if(!frase){ taskqText.focus(); return; }
+    taskMic.stop();
+    var go=document.getElementById("taskqGo"); go.disabled=true;
+    taskqStatus.className="aiq-status ai-status"; taskqStatus.textContent="Organizando…";
+    var hoje=new Date();
+    var dows=["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"];
+    var today=ymdPlus(0), d1=ymdPlus(1), d2=ymdPlus(2);
+    var sys="Você organiza uma lista de tarefas em português para os próximos dias. "
+      +"Responda SOMENTE com um array JSON (sem texto fora dele e sem marcações de código). "
+      +"Gere um item para cada tarefa que a pessoa listar; não invente tarefas a mais. "
+      +"Cada item: "
+      +'"title" (a tarefa, curta e clara), '
+      +'"date" (AAAA-MM-DD; se a tarefa citar um dia como amanhã, depois de amanhã, sexta ou dia 28, resolva para a data correspondente; se NÃO citar dia, use hoje), '
+      +'"time" (HH:MM em 24 horas, ou "" se não houver), '
+      +'"pri" ("alta", "media" ou "baixa"; padrão "media"). '
+      +"Janela: hoje="+today+", amanhã="+d1+", depois de amanhã="+d2+". Hoje é "+dows[hoje.getDay()]+", "+today+".";
+    callAI(sys, frase).then(function(txt){
+      var clean=txt.replace(/```json/gi,"").replace(/```/g,"").trim();
+      var arr=null;
+      try{ arr=JSON.parse(clean); }catch(e){
+        var m=clean.match(/\[[\s\S]*\]/); if(m){ try{ arr=JSON.parse(m[0]); }catch(e2){} }
+      }
+      if(arr && !Array.isArray(arr)) arr=[arr];
+      if(!Array.isArray(arr) || !arr.length){ taskqStatus.className="aiq-status ai-status err"; taskqStatus.textContent="Não consegui organizar. Tente reescrever."; return; }
+      var added=[];
+      arr.forEach(function(it){
+        if(!it || !it.title) return;
+        var ds=/^\d{4}-\d{2}-\d{2}$/.test(it.date||"")?it.date:today;
+        var tm=/^\d{2}:\d{2}$/.test(it.time||"")?it.time:"";
+        var pri=(["alta","media","baixa"].indexOf(it.pri)>=0)?it.pri:"media";
+        var nt={ id:uid(), title:String(it.title).slice(0,200), pri:pri, done:false, date:ds, time:tm };
+        db.tasks.push(nt); added.push(nt.id);
+        mirror("upsert","tasks",{id:nt.id,title:nt.title,pri:nt.pri,done:nt.done,date:nt.date,time:nt.time});
+      });
+      if(!added.length){ taskqStatus.className="aiq-status ai-status err"; taskqStatus.textContent="Nada para adicionar."; return; }
+      saveLocal("tasks"); lastTaskBatch=added; taskqText.value=""; renderTasks();
+      taskqStatus.className="aiq-status ai-status";
+      taskqStatus.innerHTML=added.length+(added.length===1?" tarefa adicionada · ":" tarefas adicionadas · ")+'<span class="undo-link" id="taskUndo">desfazer</span>';
+      document.getElementById("taskUndo").addEventListener("click", function(){
+        lastTaskBatch.forEach(function(id){ db.tasks=db.tasks.filter(function(x){return x.id!==id;}); mirror("delete","tasks",id); });
+        lastTaskBatch=[]; saveLocal("tasks"); renderTasks(); taskqStatus.className="aiq-status ai-status"; taskqStatus.textContent="Desfeito.";
+      });
+    }).catch(function(err){
+      taskqStatus.className="aiq-status ai-status err"; taskqStatus.textContent=(err&&err.message)||"Falha ao organizar.";
+    }).then(function(){ go.disabled=false; });
+  });
 
   /* ===================== NOTAS ===================== */
   var activeNote=null, noteSearch="", noteTimer=null;
