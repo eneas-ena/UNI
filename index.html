@@ -260,29 +260,29 @@
   .filters .btn.active{ outline:2px solid var(--brass-dim); }
 
   /* ===== NOTAS ===== */
-  .notes-wrap{ display:grid; grid-template-columns:260px 1fr; gap:18px; height:100%; }
-  .notes-list{ border-right:1px solid var(--paper-line); padding-right:14px; overflow:auto; }
-  .note-item{
-    padding:11px 12px; border:1px solid var(--paper-line); border-radius:8px; margin-bottom:9px;
-    cursor:pointer; background:rgba(255,255,255,.3); transition:.12s;
-  }
-  .note-item:hover{ border-color:var(--brass); }
-  .note-item.active{ border-color:var(--brass); box-shadow:0 0 0 2px rgba(195,154,75,.35) inset; }
-  .note-item .ni-title{ font-size:17px; font-weight:600; }
-  .note-item .ni-prev{ font-size:14px; color:var(--ink-faint); font-style:italic;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .note-editor{ display:flex; flex-direction:column; }
-  .note-editor input.ne-title{
-    font-family:"Cinzel",serif; font-size:22px; letter-spacing:.04em; color:var(--ink);
-    border:none; background:transparent; outline:none; margin-bottom:8px; width:100%;
-    border-bottom:1px solid var(--paper-line); padding-bottom:8px;
-  }
-  .note-editor textarea{
-    flex:1; min-height:340px; border:none; background:transparent; outline:none; resize:none;
-    font-family:"Cormorant Garamond",serif; font-size:19px; line-height:1.7; color:var(--ink);
-    background-image:repeating-linear-gradient(transparent, transparent 31px, var(--paper-line) 32px);
-    line-height:32px; padding-top:2px;
-  }
+  /* ===== Mural de Ideias ===== */
+  .idea-tagrow{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .idea-chip{ font-family:"Inter",sans-serif; font-size:12px; font-weight:600; letter-spacing:.02em;
+    padding:5px 11px; border-radius:20px; border:1px solid var(--paper-edge); background:transparent;
+    color:var(--ink-soft); cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:.12s; }
+  .idea-chip .dotc{ width:9px; height:9px; border-radius:50%; flex:0 0 9px; }
+  .idea-chip.on{ color:#fff; border-color:transparent; }
+  .idea-wall{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; align-items:start; }
+  .idea-card{ position:relative; border:1px solid var(--paper-line); border-left:4px solid var(--ink-faint);
+    border-radius:10px; padding:12px 12px 10px; background:rgba(255,255,255,.45); }
+  .idea-card .ic-text{ font-family:"Cormorant Garamond",serif; font-size:18px; line-height:1.4; color:var(--ink);
+    white-space:pre-wrap; word-break:break-word; cursor:pointer; }
+  .idea-card .ic-foot{ display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .idea-card .ic-tag{ font-family:"Inter",sans-serif; font-size:10px; font-weight:700; letter-spacing:.06em;
+    text-transform:uppercase; padding:2px 8px; border-radius:20px; color:#fff; }
+  .idea-card .ic-date{ font-family:"Inter",sans-serif; font-size:11px; color:var(--ink-faint); }
+  .idea-card .ic-spacer{ flex:1; }
+  .idea-card .ic-dev{ font-family:"Inter",sans-serif; font-size:12px; font-weight:600; color:var(--brass-dim);
+    background:rgba(195,154,75,.16); border:none; border-radius:6px; padding:4px 9px; cursor:pointer; }
+  .idea-card .ic-dev:hover{ filter:brightness(.96); }
+  .idea-card .ic-del{ font-family:"Inter",sans-serif; font-size:13px; color:var(--ink-faint); background:transparent;
+    border:none; cursor:pointer; padding:2px 4px; }
+  .idea-card .ic-del:hover{ color:var(--seal); }
 
   .input, .select{
     font-family:"Cormorant Garamond",serif; font-size:17px; color:var(--ink);
@@ -473,7 +473,7 @@
     <nav class="tabs" aria-label="Seções">
       <button class="tab active" data-mod="agenda"><span class="tab-full">Agenda</span><span class="tab-abbr">AGE</span></button>
       <button class="tab" data-mod="tarefas"><span class="tab-full">Tarefas</span><span class="tab-abbr">TAR</span></button>
-      <button class="tab" data-mod="notas"><span class="tab-full">Notas</span><span class="tab-abbr">NOT</span></button>
+      <button class="tab" data-mod="notas"><span class="tab-full">Ideias</span><span class="tab-abbr">IDE</span></button>
       <button class="tab" data-mod="quadro"><span class="tab-full">Kanban</span><span class="tab-abbr">KAN</span></button>
       <button class="tab" data-mod="caderno"><span class="tab-full">Caderno</span><span class="tab-abbr">CAD</span></button>
       <button class="tab" data-mod="estudo"><span class="tab-full">Estudo</span><span class="tab-abbr">EST</span></button>
@@ -550,15 +550,55 @@
         <!-- NOTAS -->
         <div class="mod" id="mod-notas">
           <div class="row" style="margin-bottom:14px;">
-            <div class="section-title" style="margin:0;">Anotações</div>
+            <div class="section-title" style="margin:0;">Ideias</div>
             <div class="spacer"></div>
-            <input class="input" id="noteSearch" placeholder="Buscar…" style="max-width:200px;">
-            <button class="btn" id="addNote">+ Nova nota</button>
+            <input class="input" id="noteSearch" placeholder="Buscar ideia…" style="max-width:200px;">
           </div>
-          <div class="notes-wrap">
-            <div class="notes-list" id="noteList"></div>
-            <div class="note-editor" id="noteEditor">
-              <div class="empty">Selecione uma nota ou crie a primeira.</div>
+          <div class="ai-quick" id="ideaQuick">
+            <div class="aiq-row">
+              <textarea class="input" id="ideaText" rows="2" placeholder="Jogue uma ideia rápida… (ex.: sermão sobre a paciência de Jó na espera)"></textarea>
+              <button class="btn ghost aiq-mic" id="ideaMic" title="Ditar pelo microfone" aria-label="Ditar pelo microfone">🎤</button>
+            </div>
+            <div class="idea-tagrow" id="ideaTagRow"></div>
+            <div class="aiq-actions">
+              <button class="btn sm" id="ideaAdd">Guardar ideia</button>
+              <span class="aiq-status ai-status" id="ideaStatus"></span>
+            </div>
+          </div>
+          <div class="filters" id="ideaFilters"></div>
+          <div class="idea-wall" id="ideaWall"></div>
+        </div>
+
+        <!-- Modal: desenvolver ideia -->
+        <div class="overlay" id="ideaDevOverlay">
+          <div class="modal">
+            <h3 id="ideaDevTitle">Desenvolver ideia</h3>
+            <div id="ideaDevResult" class="ai-result" style="display:none; max-height:48vh; overflow:auto;"></div>
+            <div id="ideaDevStatus" class="ai-status" style="min-height:18px;"></div>
+            <div class="actions">
+              <button class="btn ghost" id="ideaDevClose">Fechar</button>
+              <button class="btn ghost" id="ideaDevCopy" style="display:none;">Copiar</button>
+              <button class="btn" id="ideaDevSave" style="display:none;">Salvar no Caderno</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: editar ideia -->
+        <div class="overlay" id="ideaEditOverlay">
+          <div class="modal">
+            <h3>Editar ideia</h3>
+            <div class="fldgroup">
+              <label class="fld">Ideia</label>
+              <textarea class="input" id="ideaEditText" rows="4"></textarea>
+            </div>
+            <div class="fldgroup">
+              <label class="fld">Etiqueta</label>
+              <div class="idea-tagrow" id="ideaEditTagRow"></div>
+            </div>
+            <div class="actions">
+              <button class="btn danger" id="ideaEditDel" style="margin-right:auto;">Excluir</button>
+              <button class="btn ghost" id="ideaEditCancel">Cancelar</button>
+              <button class="btn" id="ideaEditSave">Salvar</button>
             </div>
           </div>
         </div>
@@ -1333,52 +1373,180 @@
   });
 
   /* ===================== NOTAS ===================== */
-  var activeNote=null, noteSearch="", noteTimer=null;
+  /* ===== Mural de Ideias ===== */
+  var NOTE_TAGS=[
+    {key:"sermao", label:"Sermão",  color:"#8C2B22"},
+    {key:"estudo", label:"Estudo",  color:"#C19A4B"},
+    {key:"app",    label:"App",     color:"#3c4a63"},
+    {key:"livro",  label:"Livro",   color:"#5e4a63"},
+    {key:"pessoal",label:"Pessoal", color:"#5a6b4a"},
+    {key:"geral",  label:"Geral",   color:"#6f5a44"}
+  ];
+  function tagInfo(key){ for(var i=0;i<NOTE_TAGS.length;i++){ if(NOTE_TAGS[i].key===key) return NOTE_TAGS[i]; } return NOTE_TAGS[NOTE_TAGS.length-1]; }
+  var noteSearch="", ideaNewTag="geral", ideaFilter="todas", ideaDevLast="", editingIdeaId=null, editTag="geral";
+
+  function renderTagChips(container, getSel, setSel){
+    container.innerHTML=NOTE_TAGS.map(function(t){
+      var on=(t.key===getSel());
+      return '<button class="idea-chip'+(on?" on":"")+'" data-k="'+t.key+'" style="'+(on?"background:"+t.color+";":"")+'"><span class="dotc" style="background:'+t.color+'"></span>'+t.label+'</button>';
+    }).join("");
+    container.querySelectorAll(".idea-chip").forEach(function(b){
+      b.addEventListener("click", function(){
+        setSel(b.dataset.k);
+        container.querySelectorAll(".idea-chip").forEach(function(x){
+          var ti=tagInfo(x.dataset.k);
+          if(x.dataset.k===getSel()){ x.classList.add("on"); x.style.background=ti.color; }
+          else { x.classList.remove("on"); x.style.background="transparent"; }
+        });
+      });
+    });
+  }
+  renderTagChips(document.getElementById("ideaTagRow"), function(){return ideaNewTag;}, function(k){ideaNewTag=k;});
+
+  (function(){
+    var f=document.getElementById("ideaFilters");
+    var chips=[{key:"todas",label:"Todas"}].concat(NOTE_TAGS.map(function(t){return {key:t.key,label:t.label};}));
+    f.innerHTML=chips.map(function(t){ return '<button class="btn ghost sm'+(t.key==="todas"?" active":"")+'" data-f="'+t.key+'">'+t.label+'</button>'; }).join("");
+    f.querySelectorAll("button").forEach(function(b){
+      b.addEventListener("click", function(){
+        f.querySelectorAll("button").forEach(function(x){ x.classList.remove("active"); });
+        b.classList.add("active"); ideaFilter=b.dataset.f; renderNoteList();
+      });
+    });
+  })();
+
+  function fmtIdeaDate(ts){
+    if(!ts) return "";
+    var d=new Date(ts);
+    if(ymd(d)===todayYmd()) return "hoje";
+    if(ymd(d)===ymdPlus(-1)) return "ontem";
+    return d.getDate()+" "+MESES[d.getMonth()].slice(0,3);
+  }
   function renderNoteList(){
     var list=db.notes.slice().sort(function(a,b){ return (b.updated||0)-(a.updated||0); });
-    if(noteSearch){ var q=noteSearch.toLowerCase(); list=list.filter(function(n){ return ((n.title||"")+" "+(n.body||"")).toLowerCase().indexOf(q)>=0; }); }
-    var box=document.getElementById("noteList");
-    if(!list.length){ box.innerHTML='<div class="empty" style="font-size:15px;padding:20px 8px;">Nenhuma anotação ainda.</div>'; return; }
+    if(ideaFilter!=="todas") list=list.filter(function(n){ return (n.tag||"geral")===ideaFilter; });
+    if(noteSearch){ var q=noteSearch.toLowerCase(); list=list.filter(function(n){ return ((n.body||"")+" "+(n.title||"")).toLowerCase().indexOf(q)>=0; }); }
+    var box=document.getElementById("ideaWall");
+    if(!box) return;
+    if(!list.length){ box.innerHTML='<div class="empty" style="grid-column:1/-1;">Nenhuma ideia aqui ainda. Escreva ou dite a primeira acima.</div>'; return; }
     box.innerHTML=list.map(function(n){
-      var prev=(n.body||"").replace(/\s+/g," ").trim().slice(0,42)||"—";
-      return '<div class="note-item'+(activeNote===n.id?' active':'')+'" data-id="'+n.id+'"><div class="ni-title">'
-        +escapeHtml(n.title||"Sem título")+'</div><div class="ni-prev">'+escapeHtml(prev)+'</div></div>';
+      var ti=tagInfo(n.tag||"geral");
+      return '<div class="idea-card" data-id="'+n.id+'" style="border-left-color:'+ti.color+'">'
+        +'<div class="ic-text" title="Tocar para editar">'+escapeHtml(n.body||"")+'</div>'
+        +'<div class="ic-foot"><span class="ic-tag" style="background:'+ti.color+'">'+ti.label+'</span>'
+        +'<span class="ic-date">'+fmtIdeaDate(n.updated)+'</span><span class="ic-spacer"></span>'
+        +'<button class="ic-dev" title="Desenvolver com a IA">✦ desenvolver</button>'
+        +'<button class="ic-del" title="Excluir">✕</button></div></div>';
     }).join("");
-    box.querySelectorAll(".note-item").forEach(function(el){ el.addEventListener("click", function(){ openNote(el.dataset.id); }); });
-  }
-  function openNote(id){
-    activeNote=id;
-    var n=db.notes.find(function(x){return x.id===id;});
-    var ed=document.getElementById("noteEditor");
-    ed.innerHTML='<input class="ne-title" id="neTitle" placeholder="Título da nota" value="'+escapeAttr(n.title||"")+'">'
-      +'<textarea id="neBody" placeholder="Escreva aqui…"></textarea>'
-      +'<div class="row" style="margin-top:10px;"><div class="spacer"></div><button class="btn danger sm" id="neDel">Excluir nota</button></div>';
-    document.getElementById("neBody").value=n.body||"";
-    function persist(){
-      n.title=document.getElementById("neTitle").value;
-      n.body=document.getElementById("neBody").value;
-      n.updated=Date.now();
-      saveLocal("notes"); renderNoteList();
-      clearTimeout(noteTimer);
-      noteTimer=setTimeout(function(){ mirror("upsert","notes",{id:n.id,title:n.title,body:n.body,updated:n.updated}); }, 700);
-    }
-    document.getElementById("neTitle").addEventListener("input", persist);
-    document.getElementById("neBody").addEventListener("input", persist);
-    document.getElementById("neDel").addEventListener("click", function(){
-      db.notes=db.notes.filter(function(x){return x.id!==id;});
-      activeNote=null; saveLocal("notes"); renderNoteList();
-      document.getElementById("noteEditor").innerHTML='<div class="empty">Selecione uma nota ou crie a primeira.</div>';
-      mirror("delete","notes",id);
+    box.querySelectorAll(".idea-card").forEach(function(el){
+      var id=el.dataset.id;
+      el.querySelector(".ic-text").addEventListener("click", function(){ editIdea(id); });
+      el.querySelector(".ic-dev").addEventListener("click", function(){ developIdea(id); });
+      el.querySelector(".ic-del").addEventListener("click", function(){
+        db.notes=db.notes.filter(function(x){return x.id!==id;});
+        saveLocal("notes"); renderNoteList(); mirror("delete","notes",id);
+      });
     });
-    renderNoteList();
   }
-  document.getElementById("addNote").addEventListener("click", function(){
-    var n={id:uid(),title:"",body:"",updated:Date.now()};
-    db.notes.push(n); saveLocal("notes"); openNote(n.id);
-    mirror("upsert","notes",{id:n.id,title:n.title,body:n.body,updated:n.updated});
-    setTimeout(function(){ var t=document.getElementById("neTitle"); if(t) t.focus(); },30);
+
+  function addIdea(){
+    var txt=document.getElementById("ideaText").value.trim();
+    if(!txt){ document.getElementById("ideaText").focus(); return; }
+    ideaMicCtl.stop();
+    var n={ id:uid(), title:"", body:txt, tag:ideaNewTag, updated:Date.now() };
+    db.notes.push(n); saveLocal("notes");
+    mirror("upsert","notes",{id:n.id,title:n.title,body:n.body,tag:n.tag,updated:n.updated});
+    document.getElementById("ideaText").value="";
+    var st=document.getElementById("ideaStatus"); st.className="aiq-status ai-status"; st.textContent="Guardada!";
+    setTimeout(function(){ st.textContent=""; },1200);
+    renderNoteList(); document.getElementById("ideaText").focus();
+  }
+  document.getElementById("ideaAdd").addEventListener("click", addIdea);
+  document.getElementById("ideaText").addEventListener("keydown", function(e){
+    if(e.key==="Enter" && (e.metaKey||e.ctrlKey)){ e.preventDefault(); addIdea(); }
   });
+  var ideaMicCtl=setupMic(document.getElementById("ideaText"), document.getElementById("ideaMic"), document.getElementById("ideaStatus"));
   document.getElementById("noteSearch").addEventListener("input", function(e){ noteSearch=e.target.value; renderNoteList(); });
+
+  /* editar ideia */
+  var ideaEditOverlay=document.getElementById("ideaEditOverlay");
+  function editIdea(id){
+    var n=db.notes.find(function(x){return x.id===id;}); if(!n) return;
+    editingIdeaId=id; editTag=n.tag||"geral";
+    document.getElementById("ideaEditText").value=n.body||"";
+    renderTagChips(document.getElementById("ideaEditTagRow"), function(){return editTag;}, function(k){editTag=k;});
+    ideaEditOverlay.classList.add("open");
+    document.getElementById("ideaEditText").focus();
+  }
+  document.getElementById("ideaEditCancel").addEventListener("click", function(){ ideaEditOverlay.classList.remove("open"); });
+  ideaEditOverlay.addEventListener("click", function(e){ if(e.target===ideaEditOverlay) ideaEditOverlay.classList.remove("open"); });
+  document.getElementById("ideaEditSave").addEventListener("click", function(){
+    var n=db.notes.find(function(x){return x.id===editingIdeaId;}); if(!n) return;
+    var txt=document.getElementById("ideaEditText").value.trim();
+    if(!txt){ document.getElementById("ideaEditText").focus(); return; }
+    n.body=txt; n.tag=editTag; n.updated=Date.now();
+    saveLocal("notes"); mirror("upsert","notes",{id:n.id,title:n.title||"",body:n.body,tag:n.tag,updated:n.updated});
+    ideaEditOverlay.classList.remove("open"); renderNoteList();
+  });
+  document.getElementById("ideaEditDel").addEventListener("click", function(){
+    var id=editingIdeaId;
+    db.notes=db.notes.filter(function(x){return x.id!==id;});
+    saveLocal("notes"); ideaEditOverlay.classList.remove("open"); renderNoteList(); mirror("delete","notes",id);
+  });
+
+  /* desenvolver ideia com IA */
+  var ideaDevOverlay=document.getElementById("ideaDevOverlay");
+  function devPromptFor(tag){
+    var base="Você é um assistente do Bispo Enéas, pastor evangélico. Responda em português do Brasil, de forma organizada e prática. Comece pelo título real do conteúdo (sem rótulos genéricos). Não invente referências bíblicas; cite apenas versículos que existam e sejam pertinentes.";
+    var map={
+      sermao:" A partir da ideia recebida, monte um ESBOÇO DE SERMÃO: título, texto base, introdução breve, 3 a 4 pontos com subpontos, aplicação e conclusão.",
+      estudo:" A partir da ideia, monte um ESTUDO BÍBLICO: título, texto base, breve contexto, 3 a 5 divisões com explicação e aplicação prática.",
+      livro:" A partir da ideia, desenvolva um esboço para o capítulo ou tema do livro: premissa central, possíveis seções, pontos-chave e um gancho inicial.",
+      app:" A partir da ideia, esboce o app: o que resolve, principais funcionalidades, telas ou seções e um primeiro passo simples para começar.",
+      pessoal:" A partir da ideia, organize um pequeno plano: o objetivo, de 3 a 5 passos práticos e o primeiro passo para hoje.",
+      geral:" A partir da ideia, desenvolva um texto organizado: do que se trata, pontos principais e próximos passos."
+    };
+    return base+(map[tag]||map.geral);
+  }
+  function developIdea(id){
+    var n=db.notes.find(function(x){return x.id===id;}); if(!n) return;
+    var ti=tagInfo(n.tag||"geral");
+    document.getElementById("ideaDevTitle").textContent="Desenvolver · "+ti.label;
+    var res=document.getElementById("ideaDevResult"), stt=document.getElementById("ideaDevStatus");
+    res.style.display="none"; res.innerHTML="";
+    document.getElementById("ideaDevCopy").style.display="none";
+    document.getElementById("ideaDevSave").style.display="none";
+    stt.className="ai-status"; stt.textContent="Desenvolvendo…";
+    ideaDevOverlay.classList.add("open");
+    callAI(devPromptFor(n.tag||"geral"), n.body||"").then(function(txt){
+      ideaDevLast=txt;
+      res.innerHTML=aiRenderMd(txt); res.style.display="block";
+      stt.textContent="";
+      document.getElementById("ideaDevCopy").style.display="inline-block";
+      document.getElementById("ideaDevSave").style.display="inline-block";
+    }).catch(function(e){ stt.className="ai-status err"; stt.textContent=String((e&&e.message)||e); });
+  }
+  document.getElementById("ideaDevClose").addEventListener("click", function(){ ideaDevOverlay.classList.remove("open"); });
+  ideaDevOverlay.addEventListener("click", function(e){ if(e.target===ideaDevOverlay) ideaDevOverlay.classList.remove("open"); });
+  document.getElementById("ideaDevCopy").addEventListener("click", function(){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(aiStripMd(ideaDevLast)).then(function(){
+        var b=document.getElementById("ideaDevCopy"); b.textContent="Copiado!"; setTimeout(function(){ b.textContent="Copiar"; },1500);
+      }).catch(function(){});
+    }
+  });
+  document.getElementById("ideaDevSave").addEventListener("click", function(){
+    var clean=aiStripMd(ideaDevLast);
+    var w={ id:uid(), title:aiTitleFrom(clean), body:clean, updated:Date.now() };
+    db.writings.push(w); activeWriting=w.id; saveLocal("writings");
+    mirror("upsert","writings",{id:w.id,title:w.title,body:w.body,updated:w.updated});
+    ideaDevOverlay.classList.remove("open");
+    tabs.forEach(function(x){ x.classList.remove("active"); });
+    document.querySelector('.tab[data-mod="caderno"]').classList.add("active");
+    document.querySelectorAll(".mod").forEach(function(m){ m.classList.remove("active"); });
+    document.getElementById("mod-caderno").classList.add("active");
+    renderWriting();
+  });
 
   /* ===================== QUADRO (Kanban) ===================== */
   var KCOLS = ["A Fazer","Em Andamento","Concluído"];
@@ -1984,7 +2152,7 @@
 
   /* ESC fecha modais (menos o login) */
   document.addEventListener("keydown", function(e){
-    if(e.key==="Escape"){ closeEvent(); tkOverlay.classList.remove("open"); }
+    if(e.key==="Escape"){ closeEvent(); tkOverlay.classList.remove("open"); document.getElementById("ideaDevOverlay").classList.remove("open"); document.getElementById("ideaEditOverlay").classList.remove("open"); }
   });
 
   /* primeira pintura com o cache local, depois decide login/nuvem */
