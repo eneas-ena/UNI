@@ -313,6 +313,14 @@
   .idea-card .ic-del{ font-family:"Inter",sans-serif; font-size:13px; color:var(--ink-faint); background:transparent;
     border:none; cursor:pointer; padding:2px 4px; }
   .idea-card .ic-del:hover{ color:var(--seal); }
+  .idea-card .ic-act{ font-family:"Inter",sans-serif; font-size:12px; font-weight:600; color:var(--ink-soft);
+    background:transparent; border:none; cursor:pointer; padding:2px 4px; }
+  .idea-card .ic-act:hover{ color:var(--brass-dim); }
+  .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(18px);
+    background:var(--ink); color:var(--paper); font-family:"Inter",sans-serif; font-size:13px;
+    padding:11px 17px; border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,.32); opacity:0;
+    pointer-events:none; transition:opacity .22s, transform .22s; z-index:300; max-width:80%; text-align:center; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
   .input, .select{
     font-family:"Cormorant Garamond",serif; font-size:17px; color:var(--ink);
@@ -800,6 +808,8 @@
       </div>
     </div>
   </div>
+
+  <div id="toast" class="toast"></div>
 
   <!-- Modal de Ajustes / Backup -->
   <div class="overlay" id="settingsOverlay">
@@ -1625,6 +1635,32 @@
     if(ymd(d)===ymdPlus(-1)) return "ontem";
     return d.getDate()+" "+MESES[d.getMonth()].slice(0,3);
   }
+  var toastTimer=null;
+  function toast(msg){
+    var el=document.getElementById("toast"); if(!el) return;
+    el.textContent=msg; el.classList.add("show");
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){ el.classList.remove("show"); }, 2400);
+  }
+  function ideaToTitle(body){
+    var first=(body||"").split(/\n/)[0].trim();
+    if(first.length>100) first=first.slice(0,100).trim()+"…";
+    return first || "Ideia";
+  }
+  function ideaToTask(id){
+    var n=db.notes.find(function(x){return x.id===id;}); if(!n) return;
+    var t={ id:uid(), title:ideaToTitle(n.body), pri:"media", done:false, date:todayYmd(), time:"" };
+    db.tasks.push(t); saveLocal("tasks");
+    mirror("upsert","tasks",{id:t.id,title:t.title,pri:t.pri,done:t.done,date:t.date,time:t.time});
+    if(typeof renderTasks==="function") renderTasks();
+    toast("Tarefa criada para hoje, na aba Tarefas.");
+  }
+  function ideaToEvent(id){
+    var n=db.notes.find(function(x){return x.id===id;}); if(!n) return;
+    openEvent(null);
+    document.getElementById("evTitle").value=ideaToTitle(n.body);
+    document.getElementById("evTitle").focus();
+  }
+
   function renderNoteList(){
     var list=db.notes.slice().sort(function(a,b){ return (b.updated||0)-(a.updated||0); });
     if(ideaFilter!=="todas") list=list.filter(function(n){ return (n.tag||"geral")===ideaFilter; });
@@ -1638,12 +1674,16 @@
         +'<div class="ic-text" title="Tocar para editar">'+escapeHtml(n.body||"")+'</div>'
         +'<div class="ic-foot"><span class="ic-tag" style="background:'+ti.color+'">'+ti.label+'</span>'
         +'<span class="ic-date">'+fmtIdeaDate(n.updated)+'</span><span class="ic-spacer"></span>'
+        +'<button class="ic-act ic-task" title="Criar tarefa a partir desta ideia">→ tarefa</button>'
+        +'<button class="ic-act ic-ev" title="Criar compromisso a partir desta ideia">→ agenda</button>'
         +'<button class="ic-dev" title="Desenvolver com a IA">✦ desenvolver</button>'
         +'<button class="ic-del" title="Excluir">✕</button></div></div>';
     }).join("");
     box.querySelectorAll(".idea-card").forEach(function(el){
       var id=el.dataset.id;
       el.querySelector(".ic-text").addEventListener("click", function(){ editIdea(id); });
+      el.querySelector(".ic-task").addEventListener("click", function(){ ideaToTask(id); });
+      el.querySelector(".ic-ev").addEventListener("click", function(){ ideaToEvent(id); });
       el.querySelector(".ic-dev").addEventListener("click", function(){ developIdea(id); });
       el.querySelector(".ic-del").addEventListener("click", function(){
         db.notes=db.notes.filter(function(x){return x.id!==id;});
