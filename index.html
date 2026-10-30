@@ -1172,7 +1172,7 @@
 
 <script>
 /* ===================== VERSÃO E ATUALIZAÇÃO ===================== */
-const VERSAO = "1.1.0";
+const VERSAO = "1.2.0";
 async function atualizarApp(){
   try{
     if("serviceWorker" in navigator){ const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r=>r.unregister())); }
@@ -1458,6 +1458,17 @@ setInterval(verificarVersao, 30*60*1000);
     if(session.expires_at && (session.expires_at - 60) > now) return Promise.resolve(session.access_token);
     return authRequest("token?grant_type=refresh_token", {refresh_token:session.refresh_token})
       .then(function(d){ setSession(d); return session.access_token; });
+  }
+  // Chamadas ao Worker (IA e agendas) levam o crachá do login do UNI;
+  // o Worker só atende o dono.
+  function workerFetch(url, opts){
+    return ensureToken().catch(function(){ return null; }).then(function(tok){
+      opts = opts || {};
+      var h = {}; var o = opts.headers || {}; for(var k in o){ h[k] = o[k]; }
+      if(tok) h["Authorization"] = "Bearer " + tok;
+      opts.headers = h;
+      return fetch(url, opts);
+    });
   }
   // O módulo Despesas usa o mesmo login do UNI (sem PIN próprio)
   window.__uniToken = function(){ return ensureToken().catch(function(){ return null; }); };
@@ -2476,7 +2487,7 @@ ESTILO: linguagem clara, acessível e pastoral; profundidade sem perder simplici
     return "Estudo";
   }
   function callAI(system, userText, _retry){
-    return fetch(WORKER_URL, {
+    return workerFetch(WORKER_URL, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({
@@ -2509,7 +2520,7 @@ ESTILO: linguagem clara, acessível e pastoral; profundidade sem perder simplici
   }
   // Versão em fluxo (streaming): o texto chega aos poucos; mantém a conexão viva no Safari do iPhone.
   function callAIStream(system, userText, onDelta){
-    return fetch(WORKER_URL, {
+    return workerFetch(WORKER_URL, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({
@@ -2765,7 +2776,7 @@ ESTILO: linguagem clara, acessível e pastoral; profundidade sem perder simplici
     var winE=new Date(now.getFullYear(), now.getMonth()+7, 0);
     setSync("syncing");
     Promise.all(enabled.map(function(c){
-      return fetch(WORKER_URL+"/ical", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:c.url}) })
+      return workerFetch(WORKER_URL+"/ical", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:c.url}) })
         .then(function(r){ return r.text(); })
         .then(function(t){
           if(t.indexOf("BEGIN:VCALENDAR")<0) return [];
@@ -2868,7 +2879,7 @@ ESTILO: linguagem clara, acessível e pastoral; profundidade sem perder simplici
     if(!name || !url){ st.textContent="Preencha o nome e o endereço."; return; }
     if(!/^https:\/\//i.test(url)){ st.textContent="O endereço deve começar com https://"; return; }
     st.textContent="Testando o endereço…";
-    fetch(WORKER_URL+"/ical", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:url}) })
+    workerFetch(WORKER_URL+"/ical", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:url}) })
       .then(function(r){ return r.text(); })
       .then(function(t){
         if(t.indexOf("BEGIN:VCALENDAR")<0){ st.textContent="Não consegui ler essa agenda. Confira se é o link iCal (.ics) e tente de novo."; return; }
